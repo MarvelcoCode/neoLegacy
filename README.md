@@ -1,7 +1,11 @@
 # MinecraftConsoles
 
 If you have any questions regarding this fork, this is my Fluxer server (similar to a Discord server):
-[![Join my Fluxer server](https://i.imgur.com/JiS6fK9.png)](https://fluxer.gg/CgS3uFT7)
+<p align="center">
+  <a href="https://fluxer.gg/CgS3uFT7">
+    <img src="https://i.imgur.com/cNo8fMs.png" alt="Join my Fluxer server" width="220">
+  </a>
+</p>
 
 ![Tutorial World](.github/TutorialWorld.png)
 
