@@ -32,7 +32,7 @@ See our our [Contributor's Guide](./CONTRIBUTING.md) for more information on the
 ## Download
 Windows users can download our [Nightly Build](https://github.com/itsRevela/MinecraftConsoles/releases/tag/Nightly)! Simply download the `.zip` file and extract it to a folder where you'd like to keep the game. You can set your username in `username.txt` (you'll have to make this file)
 
-If you're looking for Dedicated Server software, download its [Nightly Build here](https://github.com/smartcmd/MinecraftConsoles/releases/tag/nightly-dedicated-server). Similar instructions to the client more or less, though see further down in this README for more info on that.
+If you're looking for Dedicated Server software (with hardcore-mode functionality), download its [Nightly Build here](https://github.com/itsRevela/MinecraftConsoles/releases/tag/Nightly-Dedicated-Server). Similar instructions to the client more or less, though see further down in this README for more info on that.
 
 ## Platform Support
 
