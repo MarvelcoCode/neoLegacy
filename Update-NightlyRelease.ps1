@@ -282,7 +282,6 @@ $uploadBase = "https://uploads.github.com/repos/$RepoOwner/$RepoName/releases/$r
 $filesToUpload = @(
     @{ Path = $ZipPath;                                         Name = $ZipName;                ContentType = "application/zip" }
     @{ Path = Join-Path $ReleaseDir "Minecraft.Client.exe";     Name = "Minecraft.Client.exe";  ContentType = "application/octet-stream" }
-    @{ Path = Join-Path $ReleaseDir "Minecraft.Client.pdb";     Name = "Minecraft.Client.pdb";  ContentType = "application/octet-stream" }
 )
 
 foreach ($file in $filesToUpload) {
@@ -311,7 +310,7 @@ Write-Host ""
 Write-Host "==> Nightly releases updated successfully!" -ForegroundColor Green
 Write-Host "    Commit:         $shortHash"
 Write-Host "    Client title:   $newTitle"
-Write-Host "    Client assets:  $ZipName, Minecraft.Client.exe, Minecraft.Client.pdb"
+Write-Host "    Client assets:  $ZipName, Minecraft.Client.exe"
 Write-Host "    Server title:   $serverNewTitle"
 Write-Host "    Server assets:  $ServerZipName"
 Write-Host "    Archive:        $archiveFolder"
