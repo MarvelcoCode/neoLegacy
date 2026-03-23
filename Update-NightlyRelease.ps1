@@ -23,7 +23,7 @@ $ZipName         = "LCEWindows64.zip"
 $ServerReleaseTag  = "Nightly-Dedicated-Server"
 $ServerReleaseDir  = Join-Path $PSScriptRoot "build\Minecraft.Server\Release"
 $ServerZipName     = "LCEServerWindows64.zip"
-$ArchiveRoot     = "C:\Users\rexma\Documents\Minecraft\itsRevelaReleases"
+$ArchiveRoot     = "C:\Users\revela\Documents\Minecraft\itsRevelaReleases"
 $ApiBase         = "https://api.github.com/repos/$RepoOwner/$RepoName"
 
 $Token = $env:GITHUB_TOKEN
