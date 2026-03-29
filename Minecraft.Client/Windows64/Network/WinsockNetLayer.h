@@ -9,6 +9,7 @@
 #include <vector>
 #include "..\..\Common\Network\NetworkPlayerInterface.h"
 #include "..\..\..\Minecraft.World\DisconnectPacket.h"
+#include "..\..\..\Minecraft.Server\Security\StreamCipher.h"
 
 #pragma comment(lib, "Ws2_32.lib")
 
@@ -16,7 +17,7 @@
 #define WIN64_NET_MAX_CLIENTS 255
 #define WIN64_SMALLID_REJECT 0xFF
 #define WIN64_NET_RECV_BUFFER_SIZE 65536
-#define WIN64_NET_MAX_PACKET_SIZE (4 * 1024 * 1024)
+#define WIN64_NET_MAX_PACKET_SIZE (512 * 1024)
 #define WIN64_LAN_DISCOVERY_PORT 25566
 #define WIN64_LAN_BROADCAST_MAGIC 0x4D434C4E
 
@@ -190,8 +191,38 @@ private:
 	static BYTE s_splitScreenSmallId[XUSER_MAX_COUNT];
 	static HANDLE s_splitScreenRecvThread[XUSER_MAX_COUNT];
 
+	// Client-side stream cipher (non-host only, one connection to server)
+	static ServerRuntime::Security::StreamCipher s_clientSendCipher;
+	static ServerRuntime::Security::StreamCipher s_clientRecvCipher;
+	static CRITICAL_SECTION s_clientCipherLock;
+	static uint8_t s_clientPendingKey[ServerRuntime::Security::StreamCipher::KEY_SIZE];
+	static bool s_clientKeyStored;  // protected by s_clientCipherLock
+
 public:
 	static void ClearSocketForSmallId(BYTE smallId);
+
+	/** Store the cipher key received from the server. Does not activate yet. */
+	static void StoreClientCipherKey(const uint8_t key[ServerRuntime::Security::StreamCipher::KEY_SIZE]);
+
+	/** Send MC|CAck directly to socket then activate client send cipher. Atomic under s_sendLock. */
+	static bool SendAckAndActivateClientSendCipher();
+
+	/** Activate client recv cipher. Called from ClientRecvThreadProc on MC|COn detection. */
+	static void ActivateClientRecvCipher();
+
+	/** Reset client ciphers on disconnect. */
+	static void ResetClientCipher();
+
+	/**
+	 * Encrypt data in-place for client->server send if the client send cipher is active.
+	 * Returns true if data was encrypted. Thread-safe.
+	 */
+	static bool TryEncryptClientOutgoing(uint8_t *data, int length);
+
+#if defined(MINECRAFT_SERVER_BUILD)
+	/** Atomically send MC|COn plaintext then commit server cipher. Called from RecvThreadProc. */
+	static bool SendCOnAndCommitServerCipher(BYTE smallId);
+#endif
 };
 
 extern bool g_Win64MultiplayerHost;

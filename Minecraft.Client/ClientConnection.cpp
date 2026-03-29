@@ -58,6 +58,7 @@
 #ifdef _WINDOWS64
 #include "Xbox\Network\NetworkPlayerXbox.h"
 #include "Common\Network\PlatformNetworkManagerStub.h"
+#include "Windows64\Network\WinsockNetLayer.h"
 #endif
 
 
@@ -3787,6 +3788,120 @@ void ClientConnection::handleSoundEvent(shared_ptr<LevelSoundPacket> packet)
 
 void ClientConnection::handleCustomPayload(shared_ptr<CustomPayloadPacket> customPayloadPacket)
 {
+#ifdef _WINDOWS64
+	// Build a server-specific identity token file path next to the executable.
+	// Each server gets its own token file based on a hash of the server address,
+	// so connecting to multiple secured servers doesn't overwrite tokens.
+	auto buildIdentityTokenPath = []() -> std::string {
+		char exePath[MAX_PATH] = {};
+		DWORD len = GetModuleFileNameA(NULL, exePath, MAX_PATH);
+		if (len == 0 || len >= MAX_PATH) return std::string();
+		char *lastSlash = strrchr(exePath, '\\');
+		if (lastSlash != NULL) *(lastSlash + 1) = 0;
+
+		// Hash the server IP:port to create a unique filename per server
+		char serverAddr[300] = {};
+		sprintf_s(serverAddr, sizeof(serverAddr), "%s:%d", g_Win64MultiplayerIP, g_Win64MultiplayerPort);
+		unsigned int hash = 5381;
+		for (const char *p = serverAddr; *p; ++p)
+			hash = ((hash << 5) + hash) + static_cast<unsigned char>(*p);
+
+		char filename[64] = {};
+		sprintf_s(filename, sizeof(filename), "identity-token-%08x.dat", hash);
+		return std::string(exePath) + filename;
+	};
+
+	// Identity token: server issued us a new token - store it locally
+	if (CustomPayloadPacket::IDENTITY_TOKEN_ISSUE.compare(customPayloadPacket->identifier) == 0)
+	{
+		if (customPayloadPacket->data.data != nullptr && customPayloadPacket->length == 32)
+		{
+			std::string tokenPath = buildIdentityTokenPath();
+			if (!tokenPath.empty())
+			{
+				FILE *f = nullptr;
+				fopen_s(&f, tokenPath.c_str(), "wb");
+				if (f != nullptr)
+				{
+					size_t written = fwrite(customPayloadPacket->data.data, 1, 32, f);
+					fclose(f);
+					if (written == 32)
+					{
+						app.DebugPrintf("Client: Stored identity token to %s\n", tokenPath.c_str());
+					}
+					else
+					{
+						app.DebugPrintf("Client: Failed to write full identity token (wrote %zu/32)\n", written);
+					}
+				}
+				else
+				{
+					app.DebugPrintf("Client: Failed to open %s for writing\n", tokenPath.c_str());
+				}
+			}
+		}
+		return;
+	}
+
+	// Identity token: server is challenging us to present our stored token
+	if (CustomPayloadPacket::IDENTITY_TOKEN_CHALLENGE.compare(customPayloadPacket->identifier) == 0)
+	{
+		std::string tokenPath = buildIdentityTokenPath();
+		FILE *f = nullptr;
+		if (!tokenPath.empty())
+			fopen_s(&f, tokenPath.c_str(), "rb");
+		if (f != nullptr)
+		{
+			uint8_t token[32] = {};
+			size_t bytesRead = fread(token, 1, 32, f);
+			fclose(f);
+			if (bytesRead == 32)
+			{
+				byteArray tokenData(32);
+				memcpy(tokenData.data, token, 32);
+				connection->send(std::make_shared<CustomPayloadPacket>(
+					CustomPayloadPacket::IDENTITY_TOKEN_RESPONSE, tokenData));
+				app.DebugPrintf("Client: Sent identity token response\n");
+			}
+			else
+			{
+				app.DebugPrintf("Client: identity-token.dat is invalid (%zu bytes)\n", bytesRead);
+				connection->send(std::make_shared<CustomPayloadPacket>(
+					CustomPayloadPacket::IDENTITY_TOKEN_RESPONSE, byteArray()));
+			}
+			SecureZeroMemory(token, sizeof(token));
+		}
+		else
+		{
+			app.DebugPrintf("Client: No identity-token.dat found, sending empty response\n");
+			connection->send(std::make_shared<CustomPayloadPacket>(
+				CustomPayloadPacket::IDENTITY_TOKEN_RESPONSE, byteArray()));
+		}
+		return;
+	}
+
+	// Stream cipher handshake: server sent us a key
+	if (CustomPayloadPacket::CIPHER_KEY_CHANNEL.compare(customPayloadPacket->identifier) == 0)
+	{
+		if (customPayloadPacket->length == ServerRuntime::Security::StreamCipher::KEY_SIZE &&
+			customPayloadPacket->data.data != nullptr)
+		{
+			app.DebugPrintf("Client: Received MC|CKey from server (%d bytes)\n", customPayloadPacket->length);
+			// Store key and send ack+activate atomically to prevent ResetClientCipher race
+			WinsockNetLayer::StoreClientCipherKey(customPayloadPacket->data.data);
+			if (!WinsockNetLayer::SendAckAndActivateClientSendCipher())
+			{
+				app.DebugPrintf("Client: Failed to send cipher ack, connection will be closed\n");
+			}
+		}
+		else
+		{
+			app.DebugPrintf("Client: Received malformed MC|CKey (length=%d)\n", customPayloadPacket->length);
+		}
+		return;
+	}
+#endif
+
 	if (CustomPayloadPacket::TRADER_LIST_PACKET.compare(customPayloadPacket->identifier) == 0)
 	{
 		ByteArrayInputStream bais(customPayloadPacket->data);

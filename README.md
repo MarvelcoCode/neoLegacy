@@ -14,6 +14,56 @@ This project is based on source code of Minecraft Legacy Console Edition v1.6.05
 
 ## Latest:
 
+### Dedicated Server Security Hardening
+
+The dedicated server now includes a comprehensive security system to protect against packet-sniffing attacks, XUID harvesting, privilege escalation, and bot flooding. All features are configurable in `server.properties`. Compatible with [playit.gg](https://playit.gg) -- enable `proxy-protocol=true` in your server.properties and enable PROXY Protocol v1 in your playit.gg tunnel settings to get per-player IP tracking, IP bans, and per-player rate limiting.
+
+**What's protected:**
+- Player identities (XUIDs) are hidden from unauthenticated connections
+- All game traffic is encrypted between secured clients and the server
+- When `require-secure-client` and `enable-stream-cipher` are both enabled, old/unpatched clients are blocked before receiving any game data
+- Server commands and privileges require persistent `ops.json` authorization
+- Connection flooding is rate-limited per IP
+- When `require-challenge-token` is enabled, returning players are verified with a persistent identity token
+
+**New `server.properties` keys:**
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enable-stream-cipher` | `true` | Encrypt all game traffic with a per-session stream cipher |
+| `require-secure-client` | `true` | Kick clients that don't complete the cipher handshake (blocks old clients) |
+| `require-challenge-token` | `false` | Require identity token verification to prevent XUID impersonation |
+| `proxy-protocol` | `false` | Parse PROXY protocol v1 headers for real client IPs behind a tunnel |
+| `hide-player-list-prelogin` | `true` | Strip player XUIDs from the pre-login response |
+| `rate-limit-connections-per-window` | `5` | Max TCP connections per IP within the rate limit window |
+| `rate-limit-window-seconds` | `30` | Sliding window duration for rate limiting |
+| `max-pending-connections` | `10` | Max simultaneous pre-login connections |
+
+**Recommended setup (especially for playit.gg):**
+
+```properties
+enable-stream-cipher=true
+require-secure-client=true
+require-challenge-token=true
+proxy-protocol=true
+```
+
+**New server commands:**
+
+| Command | Description |
+|---------|-------------|
+| `whitelist add <name>` | Whitelist a player by name (they must attempt to connect once first) |
+| `revoketoken <name>` | Revoke a player's identity token (use if a player lost their token) |
+
+**Server logging:**
+- A `server.log` file is now written alongside the server executable
+- Security events appear in the CLI with `[security]` tags
+- Each join shows a security summary: cipher status, token status, XUID, and real IP
+
+**Important:** When `require-secure-client=true` and `enable-stream-cipher=true`, only the secured client (`LCREWindows64.zip`) can connect. Old/upstream clients will be blocked before receiving any game data. Set both to `false` if you want to allow all clients.
+
+---
+
 Player list map icon color fix:
 - The colored map icon shown next to each player in the tab player list and teleport menu now matches their actual map marker color. Previously the icon was determined by a broken small-ID lookup that produced incorrect colors. The icon is now computed client-side using the same hash the map renderer uses, keyed by player name for reliable lookup
 

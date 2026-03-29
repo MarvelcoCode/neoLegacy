@@ -37,6 +37,11 @@
 #include "Options.h"
 #if defined(_WINDOWS64) && defined(MINECRAFT_SERVER_BUILD)
 #include "..\Minecraft.Server\ServerLogManager.h"
+#include "..\Minecraft.Server\Access\Access.h"
+#include "..\Minecraft.Server\Security\IdentityTokenManager.h"
+#include "..\Minecraft.Server\Security\SecurityConfig.h"
+#include "..\Minecraft.Server\Security\ConnectionCipher.h"
+extern bool g_Win64DedicatedServer;
 #endif
 
 namespace
@@ -85,6 +90,9 @@ PlayerConnection::PlayerConnection(MinecraftServer *server, Connection *connecti
 	m_onlineXUID = INVALID_XUID;
 	m_bHasClientTickedOnce = false;
 	m_logSmallId = 0;
+	m_identityVerified = false;
+	m_identityChallengeTick = -1;
+	m_securityGateOpen = true; // default open; closed when cipher is required
 
 	// Cache the first valid transport smallId because disconnect teardown can clear it before the server logger runs.
 	if (this->connection != NULL && this->connection->getSocket() != NULL)
@@ -620,6 +628,22 @@ void PlayerConnection::onDisconnect(DisconnectPacket::eDisconnectReason reason, 
 	LeaveCriticalSection(&done_cs);
 }
 
+void PlayerConnection::openSecurityGate()
+{
+	if (m_securityGateOpen)
+		return;
+
+	m_securityGateOpen = true;
+
+	// Flush all buffered packets now that the cipher is active
+	for (auto &buffered : m_securityBuffer)
+	{
+		send(buffered);
+	}
+	m_securityBuffer.clear();
+	m_securityBuffer.shrink_to_fit();
+}
+
 void PlayerConnection::onUnhandledPacket(shared_ptr<Packet> packet)
 {
 	//    logger.warning(getClass() + " wasn't prepared to deal with a " + packet.getClass());
@@ -630,6 +654,39 @@ void PlayerConnection::send(shared_ptr<Packet> packet)
 {
 	if( connection->getSocket() != nullptr )
 	{
+#if defined(_WINDOWS64) && defined(MINECRAFT_SERVER_BUILD)
+		// Security gate: when require-secure-client is enabled, buffer ALL outgoing
+		// packets until the cipher handshake completes. Only the cipher handshake
+		// CustomPayloadPacket (MC|CKey) is sent immediately. Once the cipher activates,
+		// openSecurityGate() flushes the buffer. This prevents unsecured/old clients
+		// from receiving any game data (PlayerInfoPackets, XUIDs, etc.) before being kicked.
+		if (!m_securityGateOpen)
+		{
+			// Allow cipher handshake packets through immediately
+			if (packet->getId() == 250)
+			{
+				auto cpp = dynamic_pointer_cast<CustomPayloadPacket>(packet);
+				if (cpp != nullptr &&
+					(cpp->identifier == CustomPayloadPacket::CIPHER_KEY_CHANNEL ||
+					 cpp->identifier == CustomPayloadPacket::CIPHER_ACK_CHANNEL ||
+					 cpp->identifier == CustomPayloadPacket::CIPHER_ON_CHANNEL))
+				{
+					// Fall through to send
+				}
+				else
+				{
+					m_securityBuffer.push_back(packet);
+					return;
+				}
+			}
+			else
+			{
+				m_securityBuffer.push_back(packet);
+				return;
+			}
+		}
+#endif
+
 		if( !server->getPlayers()->canReceiveAllPackets( player ) )
 		{
 			// Check if we are allowed to send this packet type
@@ -1070,10 +1127,19 @@ void PlayerConnection::handleServerSettingsChanged(shared_ptr<ServerSettingsChan
 {
 	if(packet->action==ServerSettingsChangedPacket::HOST_IN_GAME_SETTINGS)
 	{
-		// Need to check that this player has permission to change each individual setting?
-
 		INetworkPlayer *networkPlayer = getNetworkPlayer();
-		if( (networkPlayer != nullptr && networkPlayer->IsHost()) || player->isModerator())
+		bool isHost = (networkPlayer != nullptr && networkPlayer->IsHost());
+#if defined(_WINDOWS64) && defined(MINECRAFT_SERVER_BUILD)
+		// On dedicated servers, only the host can change server settings.
+		// Moderators (OPs) should not be able to alter game rules.
+		if (!isHost)
+		{
+			app.DebugPrintf("SECURITY: Non-host player %ls attempted to change server settings\n",
+				player->getName().c_str());
+			return;
+		}
+#endif
+		if( isHost || player->isModerator())
 		{
 			app.SetGameHostOption(eGameHostOption_FireSpreads, app.GetGameHostOption(packet->data,eGameHostOption_FireSpreads));
 			app.SetGameHostOption(eGameHostOption_TNT, app.GetGameHostOption(packet->data,eGameHostOption_TNT));
@@ -1096,14 +1162,81 @@ void PlayerConnection::handleServerSettingsChanged(shared_ptr<ServerSettingsChan
 void PlayerConnection::handleKickPlayer(shared_ptr<KickPlayerPacket> packet)
 {
 	INetworkPlayer *networkPlayer = getNetworkPlayer();
-	if( (networkPlayer != nullptr && networkPlayer->IsHost()) || player->isModerator())
+	bool isHost = (networkPlayer != nullptr && networkPlayer->IsHost());
+#if defined(_WINDOWS64) && defined(MINECRAFT_SERVER_BUILD)
+	// Live ops.json check for non-host players
+	if (!isHost)
 	{
+		PlayerUID kickerXuid = m_offlineXUID;
+		if (kickerXuid == INVALID_XUID) kickerXuid = m_onlineXUID;
+		if (!ServerRuntime::Access::IsPlayerOp(kickerXuid))
+		{
+			app.DebugPrintf("SECURITY: Non-OP player %ls attempted to kick\n", player->getName().c_str());
+			{
+				INetworkPlayer *npLog = getNetworkPlayer();
+				if (npLog != nullptr)
+					ServerRuntime::ServerLogManager::OnUnauthorizedCommand(npLog->GetSmallId(), player->getName(), "kick");
+			}
+			return;
+		}
+	}
+#endif
+	if( isHost || player->isModerator())
+	{
+#if defined(_WINDOWS64) && defined(MINECRAFT_SERVER_BUILD)
+		// On dedicated servers, non-host moderators cannot kick other moderators or the host.
+		if (!isHost)
+		{
+			for (auto &checkingPlayer : server->getPlayers()->players)
+			{
+				if (checkingPlayer != nullptr &&
+					checkingPlayer->connection->getNetworkPlayer() != nullptr &&
+					checkingPlayer->connection->getNetworkPlayer()->GetSmallId() == packet->m_networkSmallId)
+				{
+					if (checkingPlayer->isModerator() ||
+						checkingPlayer->connection->getNetworkPlayer()->IsHost())
+					{
+						app.DebugPrintf("SECURITY: Moderator %ls tried to kick host/moderator %ls\n",
+							player->getName().c_str(), checkingPlayer->getName().c_str());
+						return;
+					}
+					break;
+				}
+			}
+		}
+		app.DebugPrintf("CMD: Player %ls kicked player with smallId=%d\n",
+			player->getName().c_str(), packet->m_networkSmallId);
+#endif
 		server->getPlayers()->kickPlayerByShortId(packet->m_networkSmallId);
 	}
 }
 
 void PlayerConnection::handleGameCommand(shared_ptr<GameCommandPacket> packet)
 {
+#if defined(_WINDOWS64) && defined(MINECRAFT_SERVER_BUILD)
+	INetworkPlayer *networkPlayer = getNetworkPlayer();
+	bool isHost = (networkPlayer != nullptr && networkPlayer->IsHost());
+	if (!isHost)
+	{
+		// Live ops.json check - in-memory isModerator() can be stale if ops.json was edited mid-session
+		PlayerUID cmdXuid = m_offlineXUID;
+		if (cmdXuid == INVALID_XUID) cmdXuid = m_onlineXUID;
+		if (!ServerRuntime::Access::IsPlayerOp(cmdXuid))
+		{
+			app.DebugPrintf("SECURITY: Non-OP player %ls attempted server command id=%d\n",
+				player->getName().c_str(), static_cast<int>(packet->command));
+			{
+				INetworkPlayer *npLog = getNetworkPlayer();
+				if (npLog != nullptr)
+					ServerRuntime::ServerLogManager::OnUnauthorizedCommand(npLog->GetSmallId(), player->getName(), "game-command");
+			}
+			return;
+		}
+	}
+	app.DebugPrintf("CMD: Player %ls (OP=%d, Host=%d) executed command id=%d\n",
+		player->getName().c_str(), player->isModerator() ? 1 : 0, isHost ? 1 : 0,
+		static_cast<int>(packet->command));
+#endif
 	MinecraftServer::getInstance()->getCommandDispatcher()->performCommand(player, packet->command, packet->data);
 }
 
@@ -1373,10 +1506,21 @@ void PlayerConnection::handleKeepAlive(shared_ptr<KeepAlivePacket> packet)
 
 void PlayerConnection::handlePlayerInfo(shared_ptr<PlayerInfoPacket> packet)
 {
-	// Need to check that this player has permission to change each individual setting?
-
 	INetworkPlayer *networkPlayer = getNetworkPlayer();
-	if( (networkPlayer != nullptr && networkPlayer->IsHost()) || player->isModerator() )
+	bool isHost = (networkPlayer != nullptr && networkPlayer->IsHost());
+#if defined(_WINDOWS64) && defined(MINECRAFT_SERVER_BUILD)
+	// Live ops.json check for non-host players
+	if (!isHost)
+	{
+		PlayerUID infoXuid = m_offlineXUID;
+		if (infoXuid == INVALID_XUID) infoXuid = m_onlineXUID;
+		if (!ServerRuntime::Access::IsPlayerOp(infoXuid))
+		{
+			return;
+		}
+	}
+#endif
+	if( isHost || player->isModerator() )
 	{
 		shared_ptr<ServerPlayer> serverPlayer;
 		// Find the player being edited
@@ -1454,7 +1598,24 @@ void PlayerConnection::handlePlayerInfo(shared_ptr<PlayerInfoPacket> packet)
 						serverPlayer->setPlayerGamePrivilege(Player::ePlayerGamePrivilege_CanToggleClassicHunger,Player::getPlayerGamePrivilege(packet->m_playerPrivileges,Player::ePlayerGamePrivilege_CanToggleClassicHunger) );
 						serverPlayer->setPlayerGamePrivilege(Player::ePlayerGamePrivilege_CanTeleport,Player::getPlayerGamePrivilege(packet->m_playerPrivileges,Player::ePlayerGamePrivilege_CanTeleport) );
 					}
+#if defined(_WINDOWS64) && defined(MINECRAFT_SERVER_BUILD)
+					// On dedicated servers, OP can only be granted/revoked if the target is in ops.json.
+					// This prevents runtime OP escalation via crafted PlayerInfoPackets.
+					bool wantsOp = Player::getPlayerGamePrivilege(packet->m_playerPrivileges, Player::ePlayerGamePrivilege_Op) != 0;
+					PlayerUID targetXuid = serverPlayer->connection->m_offlineXUID;
+					if (targetXuid == INVALID_XUID) targetXuid = serverPlayer->connection->m_onlineXUID;
+					if (wantsOp && !ServerRuntime::Access::IsPlayerOp(targetXuid))
+					{
+						app.DebugPrintf("SECURITY: Host tried to OP player %ls who is not in ops.json\n",
+							serverPlayer->getName().c_str());
+					}
+					else
+					{
+						serverPlayer->setPlayerGamePrivilege(Player::ePlayerGamePrivilege_Op, wantsOp ? 1u : 0u);
+					}
+#else
 					serverPlayer->setPlayerGamePrivilege(Player::ePlayerGamePrivilege_Op,Player::getPlayerGamePrivilege(packet->m_playerPrivileges,Player::ePlayerGamePrivilege_Op) );
+#endif
 				}
 			}
 
@@ -1492,6 +1653,44 @@ void PlayerConnection::handlePlayerAbilities(shared_ptr<PlayerAbilitiesPacket> p
 
 void PlayerConnection::handleCustomPayload(shared_ptr<CustomPayloadPacket> customPayloadPacket)
 {
+#if defined(_WINDOWS64) && defined(MINECRAFT_SERVER_BUILD)
+	// Identity token response from client
+	if (CustomPayloadPacket::IDENTITY_TOKEN_RESPONSE.compare(customPayloadPacket->identifier) == 0)
+	{
+		PlayerUID xuid = m_offlineXUID;
+		if (xuid == INVALID_XUID) xuid = m_onlineXUID;
+
+		bool tokenValid = false;
+		if (customPayloadPacket->length == ServerRuntime::Security::IdentityTokenManager::TOKEN_SIZE &&
+			customPayloadPacket->data.length == ServerRuntime::Security::IdentityTokenManager::TOKEN_SIZE &&
+			customPayloadPacket->data.data != nullptr)
+		{
+			tokenValid = ServerRuntime::Security::GetIdentityTokenManager().VerifyToken(xuid, customPayloadPacket->data.data);
+		}
+
+		if (tokenValid)
+		{
+			m_identityVerified = true;
+			app.DebugPrintf("SECURITY: Identity token verified for player %ls\n", player->getName().c_str());
+			INetworkPlayer *npLog = getNetworkPlayer();
+			if (npLog != nullptr)
+				ServerRuntime::ServerLogManager::OnIdentityTokenVerified(npLog->GetSmallId());
+		}
+		else
+		{
+			app.DebugPrintf("SECURITY: Identity token MISMATCH for player %ls - will disconnect\n", player->getName().c_str());
+			app.DebugPrintf("SECURITY: If this player lost their token, use: revoketoken %ls\n", player->getName().c_str());
+			INetworkPlayer *npLog = getNetworkPlayer();
+			if (npLog != nullptr)
+				ServerRuntime::ServerLogManager::OnIdentityTokenMismatch(npLog->GetSmallId(), player->getName());
+			// Defer disconnect to avoid re-entrancy issues during packet dispatch
+			setWasKicked();
+			closeOnTick();
+		}
+		return;
+	}
+#endif
+
 #if 0
 	if (CustomPayloadPacket.CUSTOM_BOOK_PACKET.equals(customPayloadPacket.identifier))
 	{

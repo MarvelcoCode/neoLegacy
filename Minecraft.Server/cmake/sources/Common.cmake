@@ -521,8 +521,26 @@ set(_MINECRAFT_SERVER_COMMON_SERVER_ACCESS
   "${CMAKE_CURRENT_SOURCE_DIR}/Access/BanManager.h"
   "${CMAKE_CURRENT_SOURCE_DIR}/Access/WhitelistManager.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/Access/WhitelistManager.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Access/OpManager.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Access/OpManager.h"
 )
 source_group("Server/Access" FILES ${_MINECRAFT_SERVER_COMMON_SERVER_ACCESS})
+
+set(_MINECRAFT_SERVER_COMMON_SERVER_SECURITY
+  "${CMAKE_CURRENT_SOURCE_DIR}/Security/SecurityConfig.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Security/SecurityConfig.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Security/RateLimiter.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Security/RateLimiter.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Security/StreamCipher.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Security/StreamCipher.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Security/ConnectionCipher.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Security/ConnectionCipher.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Security/CipherHandshakeEnforcer.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Security/CipherHandshakeEnforcer.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Security/IdentityTokenManager.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Security/IdentityTokenManager.h"
+)
+source_group("Server/Security" FILES ${_MINECRAFT_SERVER_COMMON_SERVER_SECURITY})
 
 set(_MINECRAFT_SERVER_COMMON_SERVER_COMMON
   "${CMAKE_CURRENT_SOURCE_DIR}/Common/AccessStorageUtils.h"
@@ -585,6 +603,8 @@ set(_MINECRAFT_SERVER_COMMON_SERVER_CONSOLE_COMMANDS
   "${CMAKE_CURRENT_SOURCE_DIR}/Console/commands/weather/CliCommandWeather.h"
   "${CMAKE_CURRENT_SOURCE_DIR}/Console/commands/whitelist/CliCommandWhitelist.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/Console/commands/whitelist/CliCommandWhitelist.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Console/commands/revoketoken/CliCommandRevokeToken.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Console/commands/revoketoken/CliCommandRevokeToken.h"
 )
 source_group("Server/Console/Commands" FILES ${_MINECRAFT_SERVER_COMMON_SERVER_CONSOLE_COMMANDS})
 
@@ -598,6 +618,7 @@ set(MINECRAFT_SERVER_COMMON
   ${_MINECRAFT_SERVER_COMMON_ROOT}
   ${_MINECRAFT_SERVER_COMMON_SERVER}
   ${_MINECRAFT_SERVER_COMMON_SERVER_ACCESS}
+  ${_MINECRAFT_SERVER_COMMON_SERVER_SECURITY}
   ${_MINECRAFT_SERVER_COMMON_SERVER_COMMON}
   ${_MINECRAFT_SERVER_COMMON_SERVER_CONSOLE}
   ${_MINECRAFT_SERVER_COMMON_SERVER_CONSOLE_COMMANDS}

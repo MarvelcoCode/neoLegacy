@@ -23,6 +23,7 @@
 #include "commands\tp\CliCommandTp.h"
 #include "commands\weather\CliCommandWeather.h"
 #include "commands\whitelist\CliCommandWhitelist.h"
+#include "commands\revoketoken\CliCommandRevokeToken.h"
 #include "..\Common\StringUtils.h"
 #include "..\ServerShutdown.h"
 #include "..\ServerLogger.h"
@@ -100,6 +101,7 @@ namespace ServerRuntime
 		m_registry->Register(std::unique_ptr<IServerCliCommand>(new CliCommandPardonIp()));
 		m_registry->Register(std::unique_ptr<IServerCliCommand>(new CliCommandBanList()));
 		m_registry->Register(std::unique_ptr<IServerCliCommand>(new CliCommandWhitelist()));
+		m_registry->Register(std::unique_ptr<IServerCliCommand>(new CliCommandRevokeToken()));
 		m_registry->Register(std::unique_ptr<IServerCliCommand>(new CliCommandTp()));
 		m_registry->Register(std::unique_ptr<IServerCliCommand>(new CliCommandTime()));
 		m_registry->Register(std::unique_ptr<IServerCliCommand>(new CliCommandWeather()));

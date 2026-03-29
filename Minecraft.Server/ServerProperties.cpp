@@ -82,7 +82,15 @@ static const ServerPropertyDefault kServerPropertyDefaults[] =
 	{ "spawn-monsters", "true" },
 	{ "spawn-npcs", "true" },
 	{ "tnt", "true" },
-	{ "trust-players", "true" }
+	{ "trust-players", "true" },
+	{ "hide-player-list-prelogin", "true" },
+	{ "rate-limit-connections-per-window", "5" },
+	{ "rate-limit-window-seconds", "30" },
+	{ "max-pending-connections", "10" },
+	{ "require-challenge-token", "false" },
+	{ "enable-stream-cipher", "true" },
+	{ "require-secure-client", "true" },
+	{ "proxy-protocol", "false" }
 };
 
 static std::string BoolToString(bool value)
@@ -882,6 +890,15 @@ ServerPropertiesConfig LoadServerPropertiesConfig()
 
 	config.maxBuildHeight = ReadNormalizedIntProperty(&merged, "max-build-height", 256, 64, 256, &shouldWrite);
 	config.motd = ReadNormalizedStringProperty(&merged, "motd", "A Minecraft Server", 255, &shouldWrite);
+
+	config.hidePlayerListPreLogin = ReadNormalizedBoolProperty(&merged, "hide-player-list-prelogin", true, &shouldWrite);
+	config.rateLimitConnectionsPerWindow = ReadNormalizedIntProperty(&merged, "rate-limit-connections-per-window", 5, 1, 100, &shouldWrite);
+	config.rateLimitWindowSeconds = ReadNormalizedIntProperty(&merged, "rate-limit-window-seconds", 30, 5, 300, &shouldWrite);
+	config.maxPendingConnections = ReadNormalizedIntProperty(&merged, "max-pending-connections", 10, 1, 50, &shouldWrite);
+	config.requireChallengeToken = ReadNormalizedBoolProperty(&merged, "require-challenge-token", false, &shouldWrite);
+	config.enableStreamCipher = ReadNormalizedBoolProperty(&merged, "enable-stream-cipher", true, &shouldWrite);
+	config.requireSecureClient = ReadNormalizedBoolProperty(&merged, "require-secure-client", true, &shouldWrite);
+	config.proxyProtocol = ReadNormalizedBoolProperty(&merged, "proxy-protocol", false, &shouldWrite);
 
 	if (shouldWrite)
 	{

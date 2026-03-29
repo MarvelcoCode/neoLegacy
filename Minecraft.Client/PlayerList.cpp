@@ -43,7 +43,13 @@
 #include "..\Minecraft.Server\ServerLogger.h"
 #include "..\Minecraft.Server\ServerLogManager.h"
 #include "..\Minecraft.Server\ServerProperties.h"
+#include "..\Minecraft.Server\Security\SecurityConfig.h"
+#include "..\Minecraft.Server\Security\ConnectionCipher.h"
+#include "..\Minecraft.Server\Security\CipherHandshakeEnforcer.h"
+#include "..\Minecraft.Server\Security\IdentityTokenManager.h"
 extern bool g_Win64DedicatedServer;
+static unsigned int s_playerListTickCount = 0;
+static const int kIdentityResponseGraceTicks = 200; // 10 seconds at 20 TPS
 #endif
 
 // 4J - this class is fairly substantially altered as there didn't seem any point in porting code for banning, whitelisting, ops etc.
@@ -267,6 +273,22 @@ bool PlayerList::placeNewPlayer(Connection *connection, shared_ptr<ServerPlayer>
 	app.DebugPrintf("RECONNECT: placeNewPlayer smallId=%d entityId=%d dim=%d\n",
 		newSmallId, player->entityId, level->dimension->id);
 
+#if defined(_WINDOWS64) && defined(MINECRAFT_SERVER_BUILD)
+	// Close the security gate before sending any game data. All packets will be
+	// buffered until the cipher handshake completes, preventing unsecured clients
+	// from receiving XUIDs or game state during the grace period.
+	if (g_Win64DedicatedServer &&
+		ServerRuntime::Security::GetSettings().enableStreamCipher &&
+		ServerRuntime::Security::GetSettings().requireSecureClient)
+	{
+		INetworkPlayer *gateNp = connection->getSocket() ? connection->getSocket()->getPlayer() : nullptr;
+		if (gateNp != nullptr && !gateNp->IsLocal())
+		{
+			playerConnection->m_securityGateOpen = false;
+		}
+	}
+#endif
+
 	playerConnection->send(std::make_shared<LoginPacket>(L"", player->entityId, level->getLevelData()->getGenerator(),
 	                                                     level->getSeed(),
 	                                                     player->gameMode->getGameModeForPlayer()->getId(),
@@ -338,6 +360,39 @@ bool PlayerList::placeNewPlayer(Connection *connection, shared_ptr<ServerPlayer>
 			}
 		}
 	}
+
+#if defined(_WINDOWS64) && defined(MINECRAFT_SERVER_BUILD)
+	// Initiate stream cipher handshake if enabled.
+	// Send MC|CKey with the generated key. Old clients will ignore the unknown channel.
+	if (g_Win64DedicatedServer && ServerRuntime::Security::GetSettings().enableStreamCipher)
+	{
+		BYTE smallId = 0;
+		Socket *cipherSock = connection->getSocket();
+		INetworkPlayer *cipherNp = cipherSock ? cipherSock->getPlayer() : nullptr;
+		if (cipherNp != nullptr && !cipherNp->IsLocal())
+		{
+			smallId = cipherNp->GetSmallId();
+			uint8_t key[ServerRuntime::Security::StreamCipher::KEY_SIZE];
+			if (ServerRuntime::Security::GetCipherRegistry().PrepareKey(smallId, key))
+			{
+				byteArray keyData(ServerRuntime::Security::StreamCipher::KEY_SIZE);
+				memcpy(keyData.data, key, ServerRuntime::Security::StreamCipher::KEY_SIZE);
+				playerConnection->send(std::make_shared<CustomPayloadPacket>(
+					CustomPayloadPacket::CIPHER_KEY_CHANNEL, keyData));
+				SecureZeroMemory(key, sizeof(key));
+				app.DebugPrintf("Server: Sent MC|CKey to player %ls (smallId=%d)\n",
+					player->getName().c_str(), smallId);
+
+				// Register with enforcer for timeout tracking
+				if (ServerRuntime::Security::GetSettings().requireSecureClient)
+				{
+					ServerRuntime::Security::GetHandshakeEnforcer().OnCipherKeySent(smallId, s_playerListTickCount);
+				}
+			}
+		}
+	}
+#endif
+
 	return true;
 }
 
@@ -570,6 +625,16 @@ void PlayerList::move(shared_ptr<ServerPlayer> player)
 
 void PlayerList::remove(shared_ptr<ServerPlayer> player)
 {
+#if defined(_WINDOWS64) && defined(MINECRAFT_SERVER_BUILD)
+	if (g_Win64DedicatedServer && player->connection != nullptr)
+	{
+		INetworkPlayer *np = player->connection->getNetworkPlayer();
+		if (np != nullptr)
+		{
+			ServerRuntime::Security::GetHandshakeEnforcer().OnDisconnected(np->GetSmallId());
+		}
+	}
+#endif
 	save(player);
 	//4J Stu - We don't want to save the map data for guests, so when we are sure that the player is gone delete the map
 	if(player->isGuest()) playerIo->deleteMapFilesForPlayer(player);
@@ -1038,6 +1103,131 @@ void PlayerList::repositionAcrossDimension(shared_ptr<Entity> entity, int lastDi
 
 void PlayerList::tick()
 {
+#if defined(_WINDOWS64) && defined(MINECRAFT_SERVER_BUILD)
+	++s_playerListTickCount;
+
+	// Cipher handshake enforcement: kick clients that haven't completed the handshake
+	if (g_Win64DedicatedServer &&
+		ServerRuntime::Security::GetSettings().enableStreamCipher &&
+		ServerRuntime::Security::GetSettings().requireSecureClient)
+	{
+		std::vector<unsigned char> expired;
+		std::vector<unsigned char> completed;
+		ServerRuntime::Security::GetHandshakeEnforcer().CheckTimeouts(s_playerListTickCount, expired, completed);
+
+		for (unsigned char smallId : expired)
+		{
+			app.DebugPrintf("SECURITY: Kicking unsecured client (smallId=%d) - cipher handshake timed out\n", smallId);
+			ServerRuntime::ServerLogManager::OnUnsecuredClientKicked(smallId);
+			EnterCriticalSection(&m_closePlayersCS);
+			m_smallIdsToClose.push_back(smallId);
+			LeaveCriticalSection(&m_closePlayersCS);
+		}
+
+		// Report cipher completion and open security gate for all completed handshakes
+		for (unsigned char smallId : completed)
+		{
+			// Open the security gate -- flush buffered game packets now that cipher is active
+			for (auto &p : players)
+			{
+				if (p == nullptr || p->connection == nullptr) continue;
+				INetworkPlayer *np = p->connection->getNetworkPlayer();
+				if (np != nullptr && np->GetSmallId() == smallId)
+				{
+					if (!p->connection->isSecurityGateOpen())
+					{
+						p->connection->openSecurityGate();
+					}
+					break;
+				}
+			}
+
+			if (ServerRuntime::Security::GetSettings().requireChallengeToken)
+			{
+				ServerRuntime::ServerLogManager::OnCipherHandshakeCompleted(smallId);
+			}
+			else
+			{
+				ServerRuntime::ServerLogManager::OnCipherCompletedNoTokenRequired(smallId);
+			}
+		}
+
+		// For newly-completed cipher handshakes, initiate identity token exchange
+		if (ServerRuntime::Security::GetSettings().requireChallengeToken)
+		{
+			for (unsigned char smallId : completed)
+			{
+				// Find the player by smallId
+				for (auto &p : players)
+				{
+					if (p == nullptr || p->connection == nullptr) continue;
+					INetworkPlayer *np = p->connection->getNetworkPlayer();
+					if (np == nullptr || np->GetSmallId() != smallId) continue;
+
+					PlayerUID xuid = p->connection->m_offlineXUID;
+					if (xuid == INVALID_XUID) xuid = p->connection->m_onlineXUID;
+
+					if (p->connection->getIdentityChallengeTick() >= 0)
+					{
+						// Already challenged, skip
+					}
+					else if (ServerRuntime::Security::GetIdentityTokenManager().HasToken(xuid))
+					{
+						// Returning player - challenge them
+						p->connection->send(std::make_shared<CustomPayloadPacket>(
+							CustomPayloadPacket::IDENTITY_TOKEN_CHALLENGE, byteArray()));
+						p->connection->setIdentityChallengeTick(s_playerListTickCount);
+						app.DebugPrintf("Server: Sent identity challenge to %ls (smallId=%d)\n",
+							p->getName().c_str(), smallId);
+					}
+					else
+					{
+						// New player - issue a token over the encrypted channel
+						uint8_t token[ServerRuntime::Security::IdentityTokenManager::TOKEN_SIZE];
+						if (ServerRuntime::Security::GetIdentityTokenManager().IssueToken(xuid, token))
+						{
+							byteArray tokenData(ServerRuntime::Security::IdentityTokenManager::TOKEN_SIZE);
+							memcpy(tokenData.data, token, ServerRuntime::Security::IdentityTokenManager::TOKEN_SIZE);
+							p->connection->send(std::make_shared<CustomPayloadPacket>(
+								CustomPayloadPacket::IDENTITY_TOKEN_ISSUE, tokenData));
+							SecureZeroMemory(token, sizeof(token));
+							p->connection->setIdentityVerified(true);
+							app.DebugPrintf("Server: Issued identity token to %ls (smallId=%d)\n",
+								p->getName().c_str(), smallId);
+							ServerRuntime::ServerLogManager::OnIdentityTokenIssued(smallId);
+						}
+					}
+					break;
+				}
+			}
+
+			// Enforce identity token response timeout
+			for (auto &p : players)
+			{
+				if (p == nullptr || p->connection == nullptr) continue;
+				int challengeTick = p->connection->getIdentityChallengeTick();
+				if (challengeTick >= 0 && !p->connection->isIdentityVerified() &&
+					(s_playerListTickCount - challengeTick) > kIdentityResponseGraceTicks)
+				{
+					app.DebugPrintf("SECURITY: Kicking %ls - identity token response timed out\n",
+						p->getName().c_str());
+					INetworkPlayer *npLog = p->connection->getNetworkPlayer();
+					if (npLog != nullptr)
+						ServerRuntime::ServerLogManager::OnIdentityTokenTimeout(npLog->GetSmallId(), p->getName());
+					p->connection->setIdentityChallengeTick(-1);  // prevent re-queuing
+					INetworkPlayer *np = p->connection->getNetworkPlayer();
+					if (np != nullptr)
+					{
+						EnterCriticalSection(&m_closePlayersCS);
+						m_smallIdsToClose.push_back(np->GetSmallId());
+						LeaveCriticalSection(&m_closePlayersCS);
+					}
+				}
+			}
+		}
+	}
+#endif
+
 	// 4J - brought changes to how often this is sent forward from 1.2.3
 	if (++sendAllPlayerInfoIn > SEND_PLAYER_INFO_INTERVAL)
 	{

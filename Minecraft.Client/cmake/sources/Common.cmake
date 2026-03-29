@@ -410,6 +410,8 @@ source_group("Windows64/Iggy/gdraw" FILES ${_MINECRAFT_CLIENT_COMMON_WINDOWS64_I
 set(_MINECRAFT_CLIENT_COMMON_WINDOWS64_NETWORK
   "${CMAKE_CURRENT_SOURCE_DIR}/Windows64/Network/WinsockNetLayer.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/Windows64/Network/WinsockNetLayer.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../Minecraft.Server/Security/StreamCipher.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../Minecraft.Server/Security/StreamCipher.h"
 )
 source_group("Windows64/Network" FILES ${_MINECRAFT_CLIENT_COMMON_WINDOWS64_NETWORK})
 

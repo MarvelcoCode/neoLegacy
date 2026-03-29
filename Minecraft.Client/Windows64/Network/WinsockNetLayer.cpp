@@ -11,6 +11,10 @@
 #if defined(MINECRAFT_SERVER_BUILD)
 #include "..\..\..\Minecraft.Server\Access\Access.h"
 #include "..\..\..\Minecraft.Server\ServerLogManager.h"
+#include "..\..\..\Minecraft.Server\ServerLogger.h"
+#include "..\..\..\Minecraft.Server\Security\SecurityConfig.h"
+#include "..\..\..\Minecraft.Server\Security\RateLimiter.h"
+#include "..\..\..\Minecraft.Server\Security\ConnectionCipher.h"
 #endif
 #include "..\..\..\Minecraft.World\DisconnectPacket.h"
 #include "..\..\Minecraft.h"
@@ -24,6 +28,28 @@ static bool RecvExact(SOCKET sock, BYTE* buf, int len);
 #if defined(MINECRAFT_SERVER_BUILD)
 static bool TryGetNumericRemoteIp(const sockaddr_in &remoteAddress, std::string *outIp);
 #endif
+
+// Raw serialized byte patterns for cipher handshake packets (CustomPayloadPacket ID 250).
+// Used by recv threads to detect handshake messages at the byte level before packet parsing,
+// enabling atomic cipher activation at the exact byte boundary.
+
+// MC|CAck: 7-char channel, empty payload. Client sends this; server recv thread matches it.
+static const BYTE kCipherAckPattern[] = {
+	0xFA,                                                                   // packet ID 250
+	0x00, 0x07,                                                             // channel length = 7
+	0x00, 0x4D, 0x00, 0x43, 0x00, 0x7C, 0x00, 0x43, 0x00, 0x41, 0x00, 0x63, 0x00, 0x6B, // "MC|CAck" UTF-16BE
+	0x00, 0x00                                                              // data length = 0
+};
+static const int kCipherAckPatternSize = sizeof(kCipherAckPattern); // 19
+
+// MC|COn: 6-char channel, empty payload. Client recv thread matches this from server.
+static const BYTE kCipherOnPattern[] = {
+	0xFA,                                                                   // packet ID 250
+	0x00, 0x06,                                                             // channel length = 6
+	0x00, 0x4D, 0x00, 0x43, 0x00, 0x7C, 0x00, 0x43, 0x00, 0x4F, 0x00, 0x6E, // "MC|COn" UTF-16BE
+	0x00, 0x00                                                              // data length = 0
+};
+static const int kCipherOnPatternSize = sizeof(kCipherOnPattern); // 17
 
 SOCKET WinsockNetLayer::s_listenSocket = INVALID_SOCKET;
 SOCKET WinsockNetLayer::s_hostConnectionSocket = INVALID_SOCKET;
@@ -78,6 +104,12 @@ int WinsockNetLayer::s_joinPort = 0;
 BYTE WinsockNetLayer::s_joinAssignedSmallId = 0;
 DisconnectPacket::eDisconnectReason WinsockNetLayer::s_joinRejectReason = DisconnectPacket::eDisconnect_Quitting;
 
+ServerRuntime::Security::StreamCipher WinsockNetLayer::s_clientSendCipher;
+ServerRuntime::Security::StreamCipher WinsockNetLayer::s_clientRecvCipher;
+CRITICAL_SECTION WinsockNetLayer::s_clientCipherLock;
+uint8_t WinsockNetLayer::s_clientPendingKey[ServerRuntime::Security::StreamCipher::KEY_SIZE] = {};
+bool WinsockNetLayer::s_clientKeyStored = false;
+
 bool g_Win64MultiplayerHost = false;
 bool g_Win64MultiplayerJoin = false;
 int g_Win64MultiplayerPort = WIN64_NET_DEFAULT_PORT;
@@ -106,6 +138,7 @@ bool WinsockNetLayer::Initialize()
 	InitializeCriticalSection(&s_disconnectLock);
 	InitializeCriticalSection(&s_freeSmallIdLock);
 	InitializeCriticalSection(&s_smallIdToSocketLock);
+	InitializeCriticalSection(&s_clientCipherLock);
 	for (int i = 0; i < 256; i++)
 		s_smallIdToSocket[i] = INVALID_SOCKET;
 
@@ -219,6 +252,8 @@ void WinsockNetLayer::Shutdown()
 		s_freeSmallIds.clear();
 		LeaveCriticalSection(&s_freeSmallIdLock);
 
+		ResetClientCipher();
+		DeleteCriticalSection(&s_clientCipherLock);
 		DeleteCriticalSection(&s_sendLock);
 		DeleteCriticalSection(&s_connectionsLock);
 		DeleteCriticalSection(&s_advertiseLock);
@@ -230,6 +265,163 @@ void WinsockNetLayer::Shutdown()
 		s_initialized = false;
 	}
 }
+
+void WinsockNetLayer::StoreClientCipherKey(const uint8_t key[ServerRuntime::Security::StreamCipher::KEY_SIZE])
+{
+	EnterCriticalSection(&s_clientCipherLock);
+	memcpy(s_clientPendingKey, key, ServerRuntime::Security::StreamCipher::KEY_SIZE);
+	s_clientKeyStored = true;
+	LeaveCriticalSection(&s_clientCipherLock);
+}
+
+bool WinsockNetLayer::SendAckAndActivateClientSendCipher()
+{
+	if (s_hostConnectionSocket == INVALID_SOCKET)
+		return false;
+
+	// Atomic: send the MC|CAck plaintext then activate the send cipher, all under s_sendLock.
+	// No other send can interleave between the ack and cipher activation.
+	EnterCriticalSection(&s_sendLock);
+
+	// Write framed packet: 4-byte length header + ack pattern
+	BYTE header[4];
+	header[0] = static_cast<BYTE>((kCipherAckPatternSize >> 24) & 0xFF);
+	header[1] = static_cast<BYTE>((kCipherAckPatternSize >> 16) & 0xFF);
+	header[2] = static_cast<BYTE>((kCipherAckPatternSize >> 8) & 0xFF);
+	header[3] = static_cast<BYTE>(kCipherAckPatternSize & 0xFF);
+
+	bool ok = true;
+	int totalSent = 0;
+	while (ok && totalSent < 4)
+	{
+		int sent = send(s_hostConnectionSocket, (const char *)header + totalSent, 4 - totalSent, 0);
+		if (sent == SOCKET_ERROR || sent == 0) { ok = false; break; }
+		totalSent += sent;
+	}
+	totalSent = 0;
+	while (ok && totalSent < kCipherAckPatternSize)
+	{
+		int sent = send(s_hostConnectionSocket, (const char *)kCipherAckPattern + totalSent, kCipherAckPatternSize - totalSent, 0);
+		if (sent == SOCKET_ERROR || sent == 0) { ok = false; break; }
+		totalSent += sent;
+	}
+
+	if (ok)
+	{
+		// Activate send cipher immediately after the ack is on the wire
+		EnterCriticalSection(&s_clientCipherLock);
+		s_clientSendCipher.Initialize(s_clientPendingKey);
+		LeaveCriticalSection(&s_clientCipherLock);
+		app.DebugPrintf("Client: Send cipher activated (MC|CAck sent)\n");
+	}
+	else
+	{
+		// Partial send corrupts the stream - force disconnect to prevent desync
+		app.DebugPrintf("Client: MC|CAck send failed, closing connection\n");
+		closesocket(s_hostConnectionSocket);
+		s_hostConnectionSocket = INVALID_SOCKET;
+	}
+
+	LeaveCriticalSection(&s_sendLock);
+	return ok;
+}
+
+void WinsockNetLayer::ActivateClientRecvCipher()
+{
+	EnterCriticalSection(&s_clientCipherLock);
+	s_clientRecvCipher.Initialize(s_clientPendingKey);
+	SecureZeroMemory(s_clientPendingKey, sizeof(s_clientPendingKey));
+	s_clientKeyStored = false;
+	LeaveCriticalSection(&s_clientCipherLock);
+}
+
+void WinsockNetLayer::ResetClientCipher()
+{
+	EnterCriticalSection(&s_clientCipherLock);
+	s_clientSendCipher.Reset();
+	s_clientRecvCipher.Reset();
+	SecureZeroMemory(s_clientPendingKey, sizeof(s_clientPendingKey));
+	s_clientKeyStored = false;
+	LeaveCriticalSection(&s_clientCipherLock);
+}
+
+bool WinsockNetLayer::TryEncryptClientOutgoing(uint8_t *data, int length)
+{
+	if (data == nullptr || length <= 0)
+		return false;
+
+	EnterCriticalSection(&s_clientCipherLock);
+	bool active = s_clientSendCipher.IsActive();
+	if (active)
+	{
+		s_clientSendCipher.Encrypt(data, length);
+	}
+	LeaveCriticalSection(&s_clientCipherLock);
+	return active;
+}
+
+#if defined(MINECRAFT_SERVER_BUILD)
+bool WinsockNetLayer::SendCOnAndCommitServerCipher(BYTE smallId)
+{
+	// Verify a pending key exists before sending MC|COn (prevents rogue ack from triggering spurious activation)
+	auto &registry = ServerRuntime::Security::GetCipherRegistry();
+
+	SOCKET sock = GetSocketForSmallId(smallId);
+	if (sock == INVALID_SOCKET)
+		return false;
+
+	// Verify a pending key exists before sending (rejects rogue acks)
+	if (!registry.HasPendingKey(smallId))
+	{
+		app.DebugPrintf("Server: Ignoring MC|CAck for smallId=%d (no pending key)\n", smallId);
+		return false;
+	}
+
+	// Atomic: send MC|COn plaintext then commit the cipher, all under s_sendLock.
+	// No other send to this smallId can happen between MC|COn and CommitCipher.
+	EnterCriticalSection(&s_sendLock);
+
+	BYTE header[4];
+	header[0] = static_cast<BYTE>((kCipherOnPatternSize >> 24) & 0xFF);
+	header[1] = static_cast<BYTE>((kCipherOnPatternSize >> 16) & 0xFF);
+	header[2] = static_cast<BYTE>((kCipherOnPatternSize >> 8) & 0xFF);
+	header[3] = static_cast<BYTE>(kCipherOnPatternSize & 0xFF);
+
+	bool ok = true;
+	int totalSent = 0;
+	while (ok && totalSent < 4)
+	{
+		int sent = send(sock, (const char *)header + totalSent, 4 - totalSent, 0);
+		if (sent == SOCKET_ERROR || sent == 0) { ok = false; break; }
+		totalSent += sent;
+	}
+	totalSent = 0;
+	while (ok && totalSent < kCipherOnPatternSize)
+	{
+		int sent = send(sock, (const char *)kCipherOnPattern + totalSent, kCipherOnPatternSize - totalSent, 0);
+		if (sent == SOCKET_ERROR || sent == 0) { ok = false; break; }
+		totalSent += sent;
+	}
+
+	if (ok)
+	{
+		// Commit AFTER the send - MC|COn is the last plaintext packet
+		registry.CommitCipher(smallId);
+		app.DebugPrintf("Server: Cipher committed for smallId=%d (MC|COn sent)\n", smallId);
+	}
+	else
+	{
+		// Partial send corrupts the stream - force close
+		app.DebugPrintf("Server: MC|COn send failed for smallId=%d, closing socket\n", smallId);
+		registry.CancelPending(smallId);
+		closesocket(sock);
+		ClearSocketForSmallId(smallId);
+	}
+
+	LeaveCriticalSection(&s_sendLock);
+	return ok;
+}
+#endif
 
 bool WinsockNetLayer::HostGame(int port, const char* bindIp)
 {
@@ -828,10 +1020,37 @@ bool WinsockNetLayer::SendToSmallId(BYTE targetSmallId, const void* data, int da
 	{
 		SOCKET sock = GetSocketForSmallId(targetSmallId);
 		if (sock == INVALID_SOCKET) return false;
+
+#if defined(MINECRAFT_SERVER_BUILD)
+		// Encrypt outgoing data if a cipher is active for this connection.
+		// TryEncryptOutgoing atomically checks and encrypts under a single lock
+		// to avoid TOCTOU races with DeactivateCipher on disconnect.
+		if (g_Win64DedicatedServer && dataSize > 0)
+		{
+			std::vector<BYTE> buf(static_cast<const BYTE*>(data),
+				static_cast<const BYTE*>(data) + dataSize);
+			if (ServerRuntime::Security::GetCipherRegistry().TryEncryptOutgoing(
+				targetSmallId, buf.data(), dataSize))
+			{
+				return SendOnSocket(sock, buf.data(), dataSize);
+			}
+		}
+#endif
 		return SendOnSocket(sock, data, dataSize);
 	}
 	else
 	{
+		// Client sending to server - encrypt if send cipher is active
+		EnterCriticalSection(&s_clientCipherLock);
+		if (s_clientSendCipher.IsActive() && dataSize > 0)
+		{
+			std::vector<BYTE> buf(static_cast<const BYTE*>(data),
+				static_cast<const BYTE*>(data) + dataSize);
+			s_clientSendCipher.Encrypt(buf.data(), dataSize);
+			LeaveCriticalSection(&s_clientCipherLock);
+			return SendOnSocket(s_hostConnectionSocket, buf.data(), dataSize);
+		}
+		LeaveCriticalSection(&s_clientCipherLock);
 		return SendOnSocket(s_hostConnectionSocket, data, dataSize);
 	}
 }
@@ -896,6 +1115,128 @@ static bool TryGetNumericRemoteIp(const sockaddr_in &remoteAddress, std::string 
 	*outIp = ip;
 	return true;
 }
+
+enum EProxyParseResult
+{
+	eProxyParse_Success,       // Valid PROXY TCP4 header, IP extracted
+	eProxyParse_Unknown,       // Valid PROXY UNKNOWN header, no IP available
+	eProxyParse_Malformed,     // Invalid header format
+	eProxyParse_Timeout,       // Recv timed out
+	eProxyParse_SocketError    // Socket error during read
+};
+
+/**
+ * Parse a PROXY protocol v1 header from the socket.
+ * Must be called immediately after accept(), before any game data is read.
+ * Sets a 5-second recv timeout, reads the header, restores timeout on all paths.
+ */
+static EProxyParseResult TryReadProxyProtocolHeader(SOCKET sock, std::string *outSrcIp)
+{
+	if (outSrcIp != nullptr)
+		outSrcIp->clear();
+
+	// Set 5-second recv timeout for the header read
+	DWORD timeout = 5000;
+	setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char *)&timeout, sizeof(timeout));
+
+	auto restoreTimeout = [sock]() {
+		DWORD noTimeout = 0;
+		setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char *)&noTimeout, sizeof(noTimeout));
+	};
+
+	// Peek at first 6 bytes to check for "PROXY " prefix
+	char peekBuf[6];
+	int peekResult = recv(sock, peekBuf, 6, MSG_PEEK);
+	if (peekResult == 0)
+	{
+		restoreTimeout();
+		return eProxyParse_SocketError;
+	}
+	if (peekResult == SOCKET_ERROR)
+	{
+		restoreTimeout();
+		int err = WSAGetLastError();
+		return (err == WSAETIMEDOUT) ? eProxyParse_Timeout : eProxyParse_SocketError;
+	}
+	if (peekResult < 6 || memcmp(peekBuf, "PROXY ", 6) != 0)
+	{
+		restoreTimeout();
+		return eProxyParse_Malformed;
+	}
+
+	// Consume header byte-by-byte until \r\n (max 107 bytes per PROXY v1 spec)
+	char lineBuf[108] = {};
+	int lineLen = 0;
+	bool foundEnd = false;
+
+	while (lineLen < 107)
+	{
+		char ch;
+		int r = recv(sock, &ch, 1, 0);
+		if (r != 1)
+		{
+			restoreTimeout();
+			int err = WSAGetLastError();
+			return (r == SOCKET_ERROR && err == WSAETIMEDOUT) ? eProxyParse_Timeout : eProxyParse_SocketError;
+		}
+		lineBuf[lineLen++] = ch;
+
+		if (lineLen >= 2 && lineBuf[lineLen - 2] == '\r' && lineBuf[lineLen - 1] == '\n')
+		{
+			foundEnd = true;
+			lineBuf[lineLen - 2] = '\0';  // null-terminate, strip \r\n
+			break;
+		}
+	}
+
+	restoreTimeout();
+
+	if (!foundEnd)
+	{
+		return eProxyParse_Malformed;
+	}
+
+	// Parse: "PROXY TCP4 <src_ip> <dst_ip> <src_port> <dst_port>"
+	// or:    "PROXY UNKNOWN"
+	char *tokens[6] = {};
+	int tokenCount = 0;
+	char *ctx = nullptr;
+	char *tok = strtok_s(lineBuf, " ", &ctx);
+	while (tok != nullptr && tokenCount < 6)
+	{
+		tokens[tokenCount++] = tok;
+		tok = strtok_s(nullptr, " ", &ctx);
+	}
+
+	if (tokenCount < 2 || strcmp(tokens[0], "PROXY") != 0)
+	{
+		return eProxyParse_Malformed;
+	}
+
+	if (strcmp(tokens[1], "UNKNOWN") == 0)
+	{
+		return eProxyParse_Unknown;
+	}
+
+	if (strcmp(tokens[1], "TCP4") != 0 || tokenCount < 6)
+	{
+		return eProxyParse_Malformed;
+	}
+
+	// Validate src_ip with inet_pton
+	struct in_addr addr;
+	if (inet_pton(AF_INET, tokens[2], &addr) != 1)
+	{
+		return eProxyParse_Malformed;
+	}
+
+	if (outSrcIp != nullptr)
+	{
+		*outSrcIp = tokens[2];
+	}
+
+	return eProxyParse_Success;
+}
 #endif
 
 void WinsockNetLayer::HandleDataReceived(BYTE fromSmallId, BYTE toSmallId, unsigned char* data, unsigned int dataSize)
@@ -948,7 +1289,36 @@ DWORD WINAPI WinsockNetLayer::AcceptThreadProc(LPVOID param)
 
 #if defined(MINECRAFT_SERVER_BUILD)
 		std::string remoteIp;
-		const bool hasRemoteIp = TryGetNumericRemoteIp(remoteAddress, &remoteIp);
+		bool hasRemoteIp = TryGetNumericRemoteIp(remoteAddress, &remoteIp);
+
+		// PROXY protocol v1: parse real client IP from tunnel header
+		if (g_Win64DedicatedServer && ServerRuntime::Security::GetSettings().proxyProtocol)
+		{
+			std::string proxiedIp;
+			EProxyParseResult proxyResult = TryReadProxyProtocolHeader(clientSocket, &proxiedIp);
+			if (proxyResult == eProxyParse_Success)
+			{
+				ServerRuntime::LogInfof("network", "PROXY: real client IP %s (tunnel: %s)",
+					proxiedIp.c_str(), hasRemoteIp ? remoteIp.c_str() : "unknown");
+				remoteIp = proxiedIp;
+				hasRemoteIp = true;
+			}
+			else if (proxyResult == eProxyParse_Unknown)
+			{
+				ServerRuntime::LogInfof("network", "PROXY: UNKNOWN header, keeping tunnel IP");
+			}
+			else
+			{
+				ServerRuntime::LogWarnf("network", "PROXY: header parse failed (result=%d) from %s",
+					(int)proxyResult, hasRemoteIp ? remoteIp.c_str() : "unknown");
+				const char *rejectIp = hasRemoteIp ? remoteIp.c_str() : "unknown";
+				ServerRuntime::ServerLogManager::OnRejectedTcpConnection(rejectIp,
+					ServerRuntime::ServerLogManager::eTcpRejectReason_InvalidProxyHeader);
+				closesocket(clientSocket);
+				continue;
+			}
+		}
+
 		const char *remoteIpForLog = hasRemoteIp ? remoteIp.c_str() : "unknown";
 		if (g_Win64DedicatedServer)
 		{
@@ -959,6 +1329,22 @@ DWORD WINAPI WinsockNetLayer::AcceptThreadProc(LPVOID param)
 				SendRejectWithReason(clientSocket, DisconnectPacket::eDisconnect_Banned);
 				closesocket(clientSocket);
 				continue;
+			}
+
+			// Rate limiting: reject connections that exceed the per-IP sliding window
+			if (hasRemoteIp)
+			{
+				const auto &secSettings = ServerRuntime::Security::GetSettings();
+				bool allowed = ServerRuntime::Security::GetGlobalRateLimiter().AllowConnection(
+					remoteIp,
+					secSettings.rateLimitConnectionsPerWindow,
+					secSettings.rateLimitWindowSeconds * 1000);
+				if (!allowed)
+				{
+					ServerRuntime::ServerLogManager::OnRejectedTcpConnection(remoteIpForLog, ServerRuntime::ServerLogManager::eTcpRejectReason_RateLimited);
+					closesocket(clientSocket);
+					continue;
+				}
 			}
 		}
 #endif
@@ -1138,6 +1524,25 @@ DWORD WINAPI WinsockNetLayer::RecvThreadProc(LPVOID param)
 			break;
 		}
 
+#if defined(MINECRAFT_SERVER_BUILD)
+		// Check for MC|CAck cipher handshake (raw byte match, before decryption).
+		// The ack is always plaintext - it's the last plaintext packet from the client.
+		if (g_Win64DedicatedServer &&
+			packetSize == kCipherAckPatternSize &&
+			memcmp(&recvBuf[0], kCipherAckPattern, kCipherAckPatternSize) == 0)
+		{
+			// Atomically send MC|COn plaintext then commit the cipher
+			SendCOnAndCommitServerCipher(clientSmallId);
+			continue;  // consumed - do not pass to game packet handler
+		}
+
+		// Decrypt incoming data if a cipher is active for this connection
+		if (g_Win64DedicatedServer)
+		{
+			ServerRuntime::Security::GetCipherRegistry().DecryptIncoming(clientSmallId, &recvBuf[0], packetSize);
+		}
+#endif
+
 		HandleDataReceived(clientSmallId, s_hostSmallId, &recvBuf[0], packetSize);
 	}
 
@@ -1180,6 +1585,14 @@ bool WinsockNetLayer::PopDisconnectedSmallId(BYTE* outSmallId)
 
 void WinsockNetLayer::PushFreeSmallId(BYTE smallId)
 {
+#if defined(MINECRAFT_SERVER_BUILD)
+	// Clean up any active cipher for this connection
+	if (g_Win64DedicatedServer)
+	{
+		ServerRuntime::Security::GetCipherRegistry().DeactivateCipher(smallId);
+	}
+#endif
+
 	// SmallIds 0..(XUSER_MAX_COUNT-1) are permanently reserved for the host's
 	// local pads and must never be recycled to remote clients.
 	if (smallId < (BYTE)XUSER_MAX_COUNT)
@@ -1416,10 +1829,29 @@ DWORD WINAPI WinsockNetLayer::ClientRecvThreadProc(LPVOID param)
 			break;
 		}
 
+		// Check for MC|COn cipher activation signal (raw byte match, before decryption).
+		// This is always sent in plaintext as the last plaintext packet from the server.
+		if (packetSize == kCipherOnPatternSize &&
+			memcmp(&recvBuf[0], kCipherOnPattern, kCipherOnPatternSize) == 0)
+		{
+			ActivateClientRecvCipher();
+			app.DebugPrintf("Client: Recv cipher activated (MC|COn received)\n");
+			continue;  // consumed - do not pass to game packet handler
+		}
+
+		// Decrypt incoming data if recv cipher is active
+		EnterCriticalSection(&s_clientCipherLock);
+		if (s_clientRecvCipher.IsActive())
+		{
+			s_clientRecvCipher.Decrypt(&recvBuf[0], packetSize);
+		}
+		LeaveCriticalSection(&s_clientCipherLock);
+
 		HandleDataReceived(s_hostSmallId, s_localSmallId, &recvBuf[0], packetSize);
 	}
 
 	s_connected = false;
+	ResetClientCipher();
 	return 0;
 }
 

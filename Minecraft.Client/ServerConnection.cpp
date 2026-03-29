@@ -10,6 +10,10 @@
 #include "..\Minecraft.World\Socket.h"
 #include "..\Minecraft.World\net.minecraft.world.level.h"
 #include "MultiPlayerLevel.h"
+#if defined(_WINDOWS64) && defined(MINECRAFT_SERVER_BUILD)
+#include "..\Minecraft.Server\Security\SecurityConfig.h"
+#include "..\Minecraft.Server\ServerLogManager.h"
+#endif
 
 ServerConnection::ServerConnection(MinecraftServer *server)
 {
@@ -40,6 +44,17 @@ void ServerConnection::addPlayerConnection(shared_ptr<PlayerConnection> uc)
 void ServerConnection::handleConnection(shared_ptr<PendingConnection> uc)
 {
 	EnterCriticalSection(&pending_cs);
+#if defined(_WINDOWS64) && defined(MINECRAFT_SERVER_BUILD)
+	int maxPending = ServerRuntime::Security::GetSettings().maxPendingConnections;
+	if (maxPending > 0 && static_cast<int>(pending.size()) >= maxPending)
+	{
+		LeaveCriticalSection(&pending_cs);
+		app.DebugPrintf("SECURITY: Rejecting connection, too many pending (%d/%d)\n",
+			static_cast<int>(pending.size()), maxPending);
+		uc->disconnect(DisconnectPacket::eDisconnect_ServerFull);
+		return;
+	}
+#endif
 	pending.push_back(uc);
 	LeaveCriticalSection(&pending_cs);
 }

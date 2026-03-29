@@ -11,6 +11,9 @@
 #include "..\ServerLogManager.h"
 #include "..\ServerProperties.h"
 #include "..\ServerShutdown.h"
+#include "..\Security\SecurityConfig.h"
+#include "..\Security\RateLimiter.h"
+#include "..\Security\IdentityTokenManager.h"
 #include "..\WorldManager.h"
 #include "..\Console\ServerCli.h"
 #include "Tesselator.h"
@@ -416,6 +419,41 @@ int main(int argc, char **argv)
 		return 2;
 	}
 	accessShutdownGuard.Activate();
+
+	{
+		ServerRuntime::Security::SecuritySettings secSettings;
+		secSettings.hidePlayerListPreLogin = serverProperties.hidePlayerListPreLogin;
+		secSettings.rateLimitConnectionsPerWindow = serverProperties.rateLimitConnectionsPerWindow;
+		secSettings.rateLimitWindowSeconds = serverProperties.rateLimitWindowSeconds;
+		secSettings.maxPendingConnections = serverProperties.maxPendingConnections;
+		secSettings.requireChallengeToken = serverProperties.requireChallengeToken;
+		secSettings.enableStreamCipher = serverProperties.enableStreamCipher;
+		secSettings.requireSecureClient = serverProperties.requireSecureClient;
+		secSettings.proxyProtocol = serverProperties.proxyProtocol;
+		ServerRuntime::Security::InitializeSettings(secSettings);
+		LogInfof("startup", "Security: hide-player-list=%s, rate-limit=%d/%ds, max-pending=%d, challenge-token=%s, stream-cipher=%s, require-secure-client=%s",
+			secSettings.hidePlayerListPreLogin ? "true" : "false",
+			secSettings.rateLimitConnectionsPerWindow,
+			secSettings.rateLimitWindowSeconds,
+			secSettings.maxPendingConnections,
+			secSettings.requireChallengeToken ? "required" : "optional",
+			secSettings.enableStreamCipher ? "enabled" : "disabled",
+			secSettings.requireSecureClient ? "true" : "false");
+		if (secSettings.proxyProtocol)
+		{
+			LogInfof("startup", "PROXY protocol: enabled (all connections must send PROXY v1 header)");
+		}
+		if (secSettings.requireSecureClient && !secSettings.enableStreamCipher)
+		{
+			LogInfof("startup", "WARNING: require-secure-client is enabled but enable-stream-cipher is disabled -- secure client enforcement will have no effect");
+		}
+
+		if (secSettings.requireChallengeToken)
+		{
+			ServerRuntime::Security::GetIdentityTokenManager().Initialize("identity-tokens.json");
+		}
+	}
+
 	LogInfof("startup", "LAN advertise: %s", serverProperties.lanAdvertise ? "enabled" : "disabled");
 	LogInfof("startup", "Whitelist: %s", serverProperties.whiteListEnabled ? "enabled" : "disabled");
 	LogInfof("startup", "Spawn protection radius: %d", serverProperties.spawnProtectionRadius);
