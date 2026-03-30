@@ -1008,8 +1008,11 @@ bool MinecraftServer::loadLevel(LevelStorageSource *storageSource, const wstring
 #endif
 		levels[i]->getLevelData()->setGameType(gameType);
 
-		// Apply hardcore flag from host option to level data so loaded worlds respect server.properties
+#ifdef MINECRAFT_SERVER_BUILD
+		// Dedicated server: server.properties hardcore flag is authoritative
 		levels[i]->getLevelData()->setHardcore(isHardcore());
+#endif
+		// Offline/client-hosted: keep the world's saved hardcore flag from NBT
 
 		if(app.getLevelGenerationOptions() != nullptr)
 		{

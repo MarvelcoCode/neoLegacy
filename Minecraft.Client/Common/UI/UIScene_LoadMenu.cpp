@@ -579,6 +579,11 @@ void UIScene_LoadMenu::tick()
 				WCHAR TempString[256];
 				swprintf( (WCHAR *)TempString, 256, L"%ls: %ls", app.GetString( IDS_SLIDER_DIFFICULTY ), L"Hardcore");
 				m_sliderDifficulty.init(TempString, eControl_Difficulty, 0, 4, 4);
+
+				// Hardcore locks game mode to Survival
+				m_iGameModeId = GameType::SURVIVAL->getId();
+				m_bGameModeCreative = false;
+				m_buttonGamemode.setLabel(app.GetString(IDS_GAMEMODE_SURVIVAL));
 			}
 		}
 
@@ -733,6 +738,8 @@ void UIScene_LoadMenu::handlePress(F64 controlId, F64 childId)
 	switch(static_cast<int>(controlId))
 	{
 	case eControl_GameMode:
+		if (m_bHardcore)
+			break; // Hardcore mode locks game mode to Survival
 		switch(m_iGameModeId)
 		{
 		case 0: // Survival

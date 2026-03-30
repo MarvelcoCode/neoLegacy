@@ -655,6 +655,23 @@ void UIScene_HUD::SetHorseJumpBarProgress(float progress)
 	}
 }
 
+void UIScene_HUD::SetHardcoreMode(bool bHardcore)
+{
+	IggyDataValue result;
+	IggyDataValue value[1];
+	value[0].type = IGGY_DATATYPE_boolean;
+	value[0].boolval = bHardcore;
+	IggyResult out = IggyPlayerCallMethodRS ( getMovie() , &result, IggyPlayerRootPath( getMovie() ), m_funcSetHardcore , 1 , value );
+
+	// When hardcore state changes, invalidate SetHealth's dirty check
+	// so hearts are redrawn with the correct frame set on the next tick
+	if(bHardcore != m_lastHealthHardcore)
+	{
+		m_lastHealthHardcore = bHardcore;
+		m_lastMaxHealth = -1;
+	}
+}
+
 void UIScene_HUD::SetHealthAbsorb(int healthAbsorb)
 {
 	if(m_iCurrentHealthAbsorb != healthAbsorb)

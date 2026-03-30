@@ -461,6 +461,8 @@ void UIScene_CreateWorldMenu::handlePress(F64 controlId, F64 childId)
 		}
 		break;
 	case eControl_GameModeToggle:
+		if (s_bHardcore)
+			break; // Hardcore mode locks game mode to Survival
 		switch(m_iGameModeId)
 		{
 		case 0: // Creative
@@ -473,7 +475,7 @@ void UIScene_CreateWorldMenu::handlePress(F64 controlId, F64 childId)
 			m_iGameModeId = GameType::ADVENTURE->getId();
 			m_bGameModeCreative = false;
 			break;
-		case 2: // Survival 
+		case 2: // Survival
 			m_buttonGamemode.setLabel(app.GetString(IDS_GAMEMODE_SURVIVAL));
 			m_iGameModeId = GameType::SURVIVAL->getId();
 			m_bGameModeCreative = false;
@@ -665,6 +667,14 @@ void UIScene_CreateWorldMenu::handleSliderMove(F64 sliderId, F64 currentValue)
 		else
 			swprintf( (WCHAR *)TempString, 256, L"%ls: %ls", app.GetString( IDS_SLIDER_DIFFICULTY ),app.GetString(m_iDifficultyTitleSettingA[value]));
 		m_sliderDifficulty.setLabel(TempString);
+
+		// Hardcore locks game mode to Survival
+		if (s_bHardcore && m_iGameModeId != GameType::SURVIVAL->getId())
+		{
+			m_iGameModeId = GameType::SURVIVAL->getId();
+			m_bGameModeCreative = false;
+			m_buttonGamemode.setLabel(app.GetString(IDS_GAMEMODE_SURVIVAL));
+		}
 		break;
 	}
 }

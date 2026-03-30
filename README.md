@@ -14,6 +14,15 @@ This project is based on source code of Minecraft Legacy Console Edition v1.6.05
 
 ## Latest:
 
+### Hardcore Hearts
+
+![Hardcore Hearts](.github/hardcore-hearts.png)
+
+- Worlds in hardcore mode now display the hardcore heart textures, matching Java Edition
+- Supports all heart states: normal, poison, wither, and flash/blink animations
+- Works across all contexts: offline worlds, online hosted worlds, and dedicated servers
+- Game mode is locked to Survival when hardcore is enabled in the world creation and load screens
+
 ### Dedicated Server Security Hardening
 
 The dedicated server now includes a comprehensive security system to protect against packet-sniffing attacks, XUID harvesting, privilege escalation, and bot flooding. All features are configurable in `server.properties`. Compatible with [playit.gg](https://playit.gg) -- enable `proxy-protocol=true` in your server.properties and enable PROXY Protocol v1 in your playit.gg tunnel settings to get per-player IP tracking, IP bans, and per-player rate limiting.
@@ -62,63 +71,72 @@ proxy-protocol=true
 
 **Important:** When `require-secure-client=true` and `enable-stream-cipher=true`, only the secured client (`LCREWindows64.zip`) can connect. Old/upstream clients will be blocked before receiving any game data. Set both to `false` if you want to allow all clients.
 
----
+### Player List Map Icon Color Fix
 
-Player list map icon color fix:
 - The colored map icon shown next to each player in the tab player list and teleport menu now matches their actual map marker color. Previously the icon was determined by a broken small-ID lookup that produced incorrect colors. The icon is now computed client-side using the same hash the map renderer uses, keyed by player name for reliable lookup
 
-End dimension fixes for dedicated servers:
+### End Dimension Fixes for Dedicated Servers
+
 - Fixed the Ender Dragon being immune to melee damage on dedicated servers. The server's entity ID allocator (smallId pool) assigned non-sequential IDs to the dragon's body parts, but the client assumed sequential offsets. Melee attacks targeted IDs the server didn't recognize, so hits were silently dropped. The server now reassigns sub-entity IDs to be sequential from the parent when an entity with parts is added to the level
 - Fixed entering the End exit portal after defeating the dragon crashing the game. The player entity was never added to the Overworld level during the dimension transition, leaving the player as a ghost entity that caused a crash on the next interaction
 - Fixed the End Poem crashing the client on dedicated servers due to an out-of-bounds player index lookup in the WIN_GAME event handler
 
-Dedicated server player list fix:
+### Dedicated Server Player List Fix
+
 - The Tab player list now correctly shows all connected players on dedicated servers. Previously only the local player was visible because remote players were never registered in the client's network player tracking when their `AddPlayerPacket` arrived
 - The dedicated server's phantom host entry (slot 0, empty name) is now filtered from the list
 - Players are properly removed from the list when they disconnect, using gamertag matching since dedicated server XUIDs are not available on the client
 
-SRV record support and async join refactor:
+### SRV Record Support and Async Join Refactor
+
 - Added DNS SRV record resolution (`_minecraft._tcp.<hostname>`), matching Java Edition behavior. Players can connect using just a domain name (e.g. `play.example.com`) and the client will automatically look up the correct server address and port from DNS
 - Refactored the async server joining system: replaced boolean flags with a clean `eJoinState` enum state machine, moved connection progress handling into a dedicated `UIScene_ConnectingProgress` class with attempt counter and cancel support, and added a `FinalizeJoin()` separation so the recv thread only starts after the UI confirms success
 
-Piston fix for dedicated servers:
+### Piston Fix for Dedicated Servers
+
 - Fixed a bug where pistons would permanently break server-wide on dedicated servers when a redstone clock ran long enough. The piston update lock (`ignoreUpdate`) was set at the start of `triggerEvent` but never cleared on three early-return paths, permanently blocking all piston neighbor updates for the rest of the session. A fast clock would eventually hit one of these paths (e.g. signal state changing between event queuing and processing), locking out every piston in the world
 
-Chunk unloading and connection stability fixes:
+### Chunk Unloading and Connection Stability Fixes
+
 - Fixed a regression where chunks outside the player's immediate vicinity would fail to load on dedicated servers, leaving giant missing areas. The server's chunk drop function was immediately removing chunks from the cache instead of queuing them for the existing save/unload pipeline, which meant chunks were never saved, never moved to the recovery cache, and their entities (item frames, paintings, etc.) were never removed from the level before being reloaded, causing entity duplication
 - Fixed the server's `dropAll()` and autosave chunk cleanup iterating the loaded chunk list while simultaneously modifying it (undefined behavior that could corrupt chunk tracking or stall the server)
 - Removed an overly aggressive `dropAll()` call that wiped the entire chunk cache whenever render distance decreased, instead of only removing the out-of-range chunks
 - Fixed a client-side connection bug where a 5-second socket recv timeout (used during the initial server handshake) was never cleared after connecting. This meant any brief server pause longer than 5 seconds (e.g. autosave, chunk I/O) would cause the client to interpret the silence as a lost connection and disconnect
 
-Dedicated server biome diversity fix:
+### Dedicated Server Biome Diversity Fix
+
 - The dedicated server previously used a completely random seed with no biome diversity checks, unlike the client which validates seeds to guarantee varied biomes. This could result in server worlds with large regions dominated by only one or two biome types (e.g. all taiga/snowy)
 - On top of that, the client's seed validation was hardcoded to only check a 54-chunk (Classic) area, so even validated seeds had no diversity guarantee beyond that. This made the problem especially noticeable on Large worlds or worlds expanded from Classic to Large
 - New server worlds now validate seeds for biome diversity, and the validation scales to the full target world size
 - Added `override-seed` in server.properties to fix existing worlds without deleting them. Set it to any seed number and newly generated chunks will use it instead of the original
 
-Server list and connection improvements:
+### Server List and Connection Improvements
+
 - Server edits and deletions now apply immediately without needing to restart the game
 - Connecting to an offline/unreachable server no longer freezes the game indefinitely
 - Connection attempts use non-blocking sockets with a 5-second timeout (3 retries max) instead of the OS TCP timeout
 - Connection runs on a background thread so the UI stays responsive, with a cancel option (press B or Escape) to back out at any time
 - Failed connections now always show a "Connection Failed" dialog instead of silently navigating back
 
-Upstream merge:
+### Upstream Merge
+
 - Fixed font rendering for color and formatting codes, splash text like "Colormatic!" now renders with proper per-character colors
 - Fixed Sign editing UI, SignEntryMenu720 restored to correct version
 - Stained glass and stained glass panes are now craftable in survival mode with full crafting UI support
 - Clicking outside a container inventory while holding an item now drops it, matching Java Edition behavior
 - Item lore text now displays on hover for items with NBT lore data
-- Increased entity limits: boats 40→60, minecarts 40→60, fireballs 200→300, projectiles 300→400
+- Increased entity limits: boats 40->60, minecarts 40->60, fireballs 200->300, projectiles 300->400
 - Fixed missing trapped chest textures in Natural Texture Pack
 - Debug packet handling now properly gated behind debug builds
 
-Music context fixes:
-- Menu music (menu1-4) now plays only on the title screen
-- creative music (creative1-6) only plays in creative mode
-- survival mode plays only calm/hal/nuance/piano tracks
+### Music Context Fixes
 
-Performance optimizations across rendering, audio, and entity systems!
+- Menu music (menu1-4) now plays only on the title screen
+- Creative music (creative1-6) only plays in creative mode
+- Survival mode plays only calm/hal/nuance/piano tracks
+
+### Performance Optimizations
+
 - Renderer: column-level frustum culling and compact visible-chunk lists skip thousands of empty iterations per frame; lightweight second-pass render path avoids redundant checks
 - Sound engine: filesystem probe results are now cached, eliminating repeated file-existence checks every time a sound plays; sounds are pre-decoded for smoother playback
 - Entity movement: reduced `shared_from_this()` overhead by caching the shared pointer; `dynamic_pointer_cast` replaced with a raw pointer cast guarded by `instanceof`
@@ -126,12 +144,14 @@ Performance optimizations across rendering, audio, and entity systems!
 - Threading: entity query locking consolidated at the `Level` layer on all platforms for consistent thread safety
 - Block breaking: server now skips redundant tile-update packets when a block is successfully destroyed
 
-Migrated to CMake build system (upstream)!
+### CMake Build System Migration
+
 - Project now builds with CMake instead of Visual Studio project files
 - Use `cmake --preset windows64` or open the repo folder directly in Visual Studio (it detects `CMakeLists.txt` automatically)
 - Old `.vcxproj`/`.sln` files are preserved on the `vs-build` branch if needed
 
-Multi-language font rendering and Unicode text input!
+### Multi-Language Font Rendering and Unicode Text Input
+
 - Type and read text/characters in Japanese, Chinese, Korean, Thai, Arabic, Hindi, and many more languages
 - Works in: chat, signs, world names, seeds, server address/port fields
 - Two rendering systems: Iggy UI uses a new unicode bitmap fallback font; legacy C++ renderer uses Java Minecraft's glyph page system
@@ -139,19 +159,23 @@ Multi-language font rendering and Unicode text input!
 - Security: blocked Unicode bidirectional override characters to prevent chat spoofing
 - Fixed a pre-existing memory leak in sign loading
 
-Added copy+paste support for IP/Port, world names, world seeds, server names, signs, etc.
-- Just use control+v to paste from your clipboard!
+### Copy+Paste Support
 
-Dedicated server releases support Hardcore Mode!
-- Dedicated server is fully compatible with `smartcmd/MinecraftConsoles` clients, even with hardcore mode!
+- Added copy+paste support for IP/Port, world names, world seeds, server names, signs, etc.
+- Just use Ctrl+V to paste from your clipboard
+
+### Dedicated Server Hardcore Mode
+
+- Dedicated server is fully compatible with `smartcmd/MinecraftConsoles` clients, even with hardcore mode
 - Client (`LCREWindows64.zip`): download from the Nightly release on GitHub
 - Dedicated Server (`LCREServerWindows64.zip`): download from the Nightly-Dedicated-Server release on GitHub
 - Docker: pull `ghcr.io/itsrevela/minecraft-lce-dedicated-server:nightly` for server container
 
-Screenshot functionality with F2!
-- pressing F2 will save a screenshot to a `screenshots` folder in your root game directory
-- works in any context: main menu, pause menu, settings, inventory, crafting, and during gameplay
-- a local-only chat message is shown to the player when in-game
+### Screenshot Functionality
+
+- Pressing F2 will save a screenshot to a `screenshots` folder in your root game directory
+- Works in any context: main menu, pause menu, settings, inventory, crafting, and during gameplay
+- A local-only chat message is shown to the player when in-game
 
 Proper implementation of Hardcore Mode in LCRE!
 - difficulty slider included in create world menu
