@@ -3882,7 +3882,8 @@ void Minecraft::tick(bool bFirst, bool bUpdateTextures)
 
 		if((player->ullButtonsPressed&(1LL<<MINECRAFT_ACTION_DROP)) && gameMode->isInputAllowed(MINECRAFT_ACTION_DROP))
 		{
-			player->drop();
+            bool ctrlHeld = g_KBMInput.IsKBMActive() && g_KBMInput.IsKeyDown(KeyboardMouseInput::KEY_CONTROL);
+			player->drop(ctrlHeld);
 		}
 
 		uint64_t ullButtonsPressed=player->ullButtonsPressed;
