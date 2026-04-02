@@ -218,12 +218,7 @@ enum eSOUND_TYPE
 	eSoundType_MOB_RABBIT_DEATH,
 	eSoundType_MOB_RABBIT_HOP,
 
-		eSoundType_MOB_PHANTOM_BITE,
-eSoundType_MOB_PHANTOM_DEATH,
-eSoundType_MOB_PHANTOM_FLAP,
-eSoundType_MOB_PHANTOM_HURT,
-eSoundType_MOB_PHANTOM_IDLE,
-eSoundType_MOB_PHANTOM_SWOOP,
+
 
 	eSoundType_MAX
 };

@@ -8559,8 +8559,7 @@ wstring CMinecraftApp::getEntityName(eINSTANCEOF type)
 		return app.GetString(IDS_BAT);
 	case eTYPE_RABBIT:
 		return app.GetString(IDS_RABBIT);
-	case eTYPE_PHANTOM:
-		return L"Phantom";
+	
 	};
 
 	return L"";
