@@ -2,7 +2,7 @@
 #include "HtmlString.h"
 #include "WrittenBook.h"
 #include "../Minecraft.Client/Minecraft.h"
-#include "../Minecraft.Client/MultiplayerLocalPlayer.h"
+#include "../Minecraft.Client/MultiPlayerLocalPlayer.h"
 
 WrittenBookItem::WrittenBookItem(int id) : Item(id)
 {
