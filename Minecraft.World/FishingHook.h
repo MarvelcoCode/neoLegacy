@@ -25,6 +25,8 @@ private:
 	int life;
 	int flightTime;
 	int nibble;
+	int nibbleTimer;
+	int lureTime;
 
 public:
 	shared_ptr<Entity> hookedIn;

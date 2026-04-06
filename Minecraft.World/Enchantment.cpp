@@ -3,6 +3,9 @@
 #include "net.minecraft.world.item.h"
 #include "Enchantment.h"
 
+#include "LuckOfTheSeaEnchantment.h"
+#include "LureEnchantment.h"
+
 //Enchantment *Enchantment::enchantments[256];
 EnchantmentArray Enchantment::enchantments = EnchantmentArray( 256 );
 vector<Enchantment *> Enchantment::validEnchantments;
@@ -36,6 +39,10 @@ Enchantment *Enchantment::arrowKnockback = nullptr;
 Enchantment *Enchantment::arrowFire = nullptr;
 Enchantment *Enchantment::arrowInfinite = nullptr;
 
+// fishing rod
+Enchantment *Enchantment::lure = nullptr;
+Enchantment *Enchantment::luckOfTheSea = nullptr;
+
 void Enchantment::staticCtor()
 {
 	allDamageProtection = new ProtectionEnchantment(0, FREQ_COMMON, ProtectionEnchantment::ALL);
@@ -66,6 +73,10 @@ void Enchantment::staticCtor()
 	arrowKnockback = new ArrowKnockbackEnchantment(49, FREQ_RARE);
 	arrowFire = new ArrowFireEnchantment(50, FREQ_RARE);
 	arrowInfinite = new ArrowInfiniteEnchantment(51, FREQ_VERY_RARE);
+
+	// fishing rod
+	lure = new LureEnchantment(64, FREQ_RARE);
+	luckOfTheSea = new LuckOfTheSeaEnchantment(65, FREQ_RARE);
 
 	for(unsigned int i = 0; i < 256; ++i)
 	{

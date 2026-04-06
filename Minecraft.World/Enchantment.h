@@ -47,6 +47,10 @@ public :
 	static Enchantment *arrowFire;
 	static Enchantment *arrowInfinite;
 
+	// fishing rod
+	static Enchantment *lure;
+	static Enchantment *luckOfTheSea;
+
 	const int id;
 
 	static void staticCtor();

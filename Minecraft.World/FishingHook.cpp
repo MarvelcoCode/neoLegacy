@@ -11,8 +11,10 @@
 #include "com.mojang.nbt.h"
 #include "FishingHook.h"
 #include "SoundTypes.h"
-
-
+#include "../Minecraft.World/FishingHelper.h"
+#include "../Minecraft.World/EnchantmentHelper.h"
+#include "../Minecraft.World/Enchantment.h"
+#include "../Minecraft.World/ItemInstance.h"
 
 // 4J - added common ctor code.
 void FishingHook::_init()
@@ -29,6 +31,10 @@ void FishingHook::_init()
 	shakeTime = 0;
 	flightTime = 0;
 	nibble = 0;
+
+	// TU 31: Fishing rod now has a random nibble timer between 5 and 30 seconds, instead of a 1/500 chance every tick (plus modifiers). Source: https://minecraft.wiki/w/Fishing
+	nibbleTimer = random->nextInt(501) + 100;
+	lureTime = 0;
 	hookedIn = nullptr;
 
 	lSteps = 0;
@@ -52,7 +58,7 @@ FishingHook::FishingHook(Level *level) : Entity( level )
 	_init();
 }
 
-FishingHook::FishingHook(Level *level, double x, double y, double z, shared_ptr<Player> owner) : Entity( level )
+FishingHook::FishingHook(Level *level, double x, double y, double z,  std::shared_ptr<Player> owner) : Entity( level )
 {
 	_init();
 
@@ -63,7 +69,7 @@ FishingHook::FishingHook(Level *level, double x, double y, double z, shared_ptr<
 	setPos(x, y, z);
 }
 
-FishingHook::FishingHook(Level *level, shared_ptr<Player> mob) : Entity( level )
+FishingHook::FishingHook(Level *level,  std::shared_ptr<Player> mob) : Entity( level )
 {
 	_init();
 
@@ -172,7 +178,7 @@ void FishingHook::tick()
 
 	if (!level->isClientSide)
 	{
-		shared_ptr<ItemInstance> selectedItem = owner->getSelectedItem();
+		std::shared_ptr<ItemInstance> selectedItem = owner->getSelectedItem();
 		if (owner->removed || !owner->isAlive() || selectedItem == nullptr || selectedItem->getItem() != Item::fishingRod || distanceToSqr(owner) > 32 * 32)
 		{
 			remove();
@@ -230,12 +236,12 @@ void FishingHook::tick()
 	{
 		to = Vec3::newTemp(res->pos->x, res->pos->y, res->pos->z);
 	}
-	shared_ptr<Entity> hitEntity = nullptr;
-	vector<shared_ptr<Entity> > *objects = level->getEntities(shared_from_this(), bb->expand(xd, yd, zd)->grow(1, 1, 1));
+	std::shared_ptr<Entity> hitEntity = nullptr;
+	vector< std::shared_ptr<Entity> > *objects = level->getEntities(shared_from_this(), bb->expand(xd, yd, zd)->grow(1, 1, 1));
 	double nearest = 0;
 	for (auto it = objects->begin(); it != objects->end(); it++)
 	{
-		shared_ptr<Entity> e = *it; // objects->at(i);
+		std::shared_ptr<Entity> e = *it; // objects->at(i);
 		if (!e->isPickable() || (e == owner && flightTime < 5)) continue;
 
 		float rr = 0.3f;
@@ -325,16 +331,48 @@ void FishingHook::tick()
 	{
 		if (nibble > 0)
 		{
+
 			nibble--;
 		} 
 		else
-		{
-			int nibbleOdds = 500;
-			if (level->isRainingAt( Mth::floor(x), Mth::floor(y) + 1, Mth::floor(z))) nibbleOdds = 300;
+		{	
+			// TU 31: Raining affects the nibble timer by random chance rather than being a fixed rate. Source: https://minecraft.wiki/w/Fishing
+			if (!(level->isRainingAt( Mth::floor(x), Mth::floor(y) + 1, Mth::floor(z)))) {
+				nibbleTimer--;
+			}
 
-			if (random->nextInt(nibbleOdds) == 0)
+			else {
+				if (random->nextInt(4) == 0) {
+					nibbleTimer -= 2;
+				}
+				else {
+					nibbleTimer--;
+				}
+			}
+
+			// Only calculate the effect of lure if it hasn't been calculated already.
+			if (lureTime == 0 && owner != nullptr)
 			{
-				nibble = random->nextInt(30) + 10;
+				std::shared_ptr<ItemInstance> selectedItemLureCheck = owner->getSelectedItem();
+				int level = EnchantmentHelper::getEnchantmentLevel(64, selectedItemLureCheck); // Lure
+				lureTime = level * 100;
+				nibbleTimer -= lureTime;
+				// if the lure effect causes the nibble timer to go below 0, reset the timer and lure time to recalculate next tick. Source: https://minecraft.wiki/w/Fishing
+				if (nibbleTimer < 0)
+				{
+					nibbleTimer = random->nextInt(501) + 100;
+					lureTime = 0;
+				}
+			}
+
+			// Checks if the nibble timer has ran out. Edge case for if it's raining and the nibble timer goes 
+			// below 0 due to the random chance of the rain decreasing the timer by 2 instead of 1.
+			if (nibbleTimer == 0 || nibbleTimer == -1)
+			{
+				// TU 31: Increase the nibble time to between 1 and 2 seconds. https://minecraft.wiki/w/Fishing
+				nibble = random->nextInt(21) + 20;
+				nibbleTimer = random->nextInt(501) + 100;
+				lureTime = 0;
 				yd -= 0.2f;
 				playSound(eSoundType_RANDOM_SPLASH, 0.25f, 1 + (random->nextFloat() - random->nextFloat()) * 0.4f);
 				float yt = static_cast<float>(Mth::floor(bb->y0));
@@ -420,7 +458,14 @@ int FishingHook::retrieve()
 	}
 	else if (nibble > 0)
 	{
-		shared_ptr<ItemEntity> ie = std::make_shared<ItemEntity>(this->Entity::level, x, y, z, shared_ptr<ItemInstance>(new ItemInstance(Item::fish_raw)));
+		FishingHelper* helper = FishingHelper::getInstance();
+
+		std::shared_ptr<ItemInstance> selectedItemSeaLuck = owner->getSelectedItem();
+		// TODO: Take into account luck potion effect when calculating luck level once it's implemented
+		int luckLevel = EnchantmentHelper::getEnchantmentLevel(65, selectedItemSeaLuck); // Luck of the sea
+		std::shared_ptr<ItemInstance> fishingItemInstance = helper->getCatch(luckLevel, random);
+		
+		std::shared_ptr<ItemEntity> ie = std::make_shared<ItemEntity>(this->Entity::level, x, y, z, fishingItemInstance);
 		double xa = owner->x - x;
 		double ya = owner->y - y;
 		double za = owner->z - z;

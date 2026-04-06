@@ -469,6 +469,8 @@ set(_MINECRAFT_WORLD_COMMON_NET_MINECRAFT_UTIL
   "${CMAKE_CURRENT_SOURCE_DIR}/WeighedRandom.h"
   "${CMAKE_CURRENT_SOURCE_DIR}/WeighedTreasure.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/WeighedTreasure.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/FishingHelper.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/FishingHelper.cpp"
 )
 source_group("net/minecraft/util" FILES ${_MINECRAFT_WORLD_COMMON_NET_MINECRAFT_UTIL})
 
@@ -1206,6 +1208,10 @@ source_group("net/minecraft/world/item/crafting" FILES ${_MINECRAFT_WORLD_COMMON
 set(_MINECRAFT_WORLD_COMMON_NET_MINECRAFT_WORLD_ITEM_ENCHANTMENT
   "${CMAKE_CURRENT_SOURCE_DIR}/ArrowDamageEnchantment.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/ArrowDamageEnchantment.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/LureEnchantment.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/LureEnchantment.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/LuckOfTheSeaEnchantment.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/LuckOfTheSeaEnchantment.h"
   "${CMAKE_CURRENT_SOURCE_DIR}/ArrowFireEnchantment.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/ArrowFireEnchantment.h"
   "${CMAKE_CURRENT_SOURCE_DIR}/ArrowInfiniteEnchantment.cpp"
