@@ -98,7 +98,7 @@ std::shared_ptr<ItemInstance> FishingHelper::handleCatch(CatchWeighedItem* weigh
 		weighedCatch->getItemId(), weighedCatch->getCount(), weighedCatch->getAuxValue()
 	);
 	
-	if ((itemInstance->id== Item::fishingRod_Id && catchType == CatchType::JUNK) || (itemInstance->id == Item::boots_leather_Id)) {
+	if ((itemInstance->id == Item::fishingRod_Id && catchType == CatchType::JUNK) || (itemInstance->id == Item::boots_leather_Id)) {
 		itemInstance->setAuxValue((int) (itemInstance->getMaxDamage() * ((double) random->nextInt(901) + 100.0) / 1000.0)); // 10% to 100% damage 
 	}
 	else if (itemInstance->id == Item::fishingRod_Id && catchType == CatchType::TREASURE) {
