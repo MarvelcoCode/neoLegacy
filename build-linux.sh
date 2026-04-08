@@ -129,7 +129,6 @@ do_install() {
     cp "$BUILD_DIR/Minecraft.Client/Minecraft.Client.exe" "$INSTALL_DIR/client/"
     cp "$BUILD_DIR/Minecraft.Server/$BUILD_TYPE/Minecraft.Server.exe" "$INSTALL_DIR/server/"
     cp "$BUILD_DIR/Minecraft.Server.FourKit/$BUILD_TYPE/Minecraft.Server.exe" "$INSTALL_DIR/fourkit/"
-    cp $BUILD_DIR/Minecraft.Server.FourKit/bin/$BUILD_TYPE/Minecraft.Server.* "$INSTALL_DIR/fourkit/"
     for asset in iggy_w64.dll Common music Windows64 Windows64Media; do
         [[ -e "$BUILD_DIR/Minecraft.Client/$asset" ]] && \
             cp -r "$BUILD_DIR/Minecraft.Client/$asset" "$INSTALL_DIR/client/" || true
@@ -138,8 +137,8 @@ do_install() {
         [[ -e "$BUILD_DIR/Minecraft.Server/$asset" ]] && \
             cp -r "$BUILD_DIR/Minecraft.Server/$asset" "$INSTALL_DIR/server/" || true
     done
-    for asset in iggy_w64.dll Common Windows64 runtime plugins; do
-        [[ -e "$BUILD_DIR/Minecraft.Server.Fourkit/$BUILD_TYPE/$asset" ]] && \
+    for asset in iggy_w64.dll Common Windows64 plugins runtime; do
+        [[ -e "$BUILD_DIR/Minecraft.Server.FourKit/$BUILD_TYPE/$asset" ]] && \
             cp -r "$BUILD_DIR/Minecraft.Server.FourKit/$BUILD_TYPE/$asset" "$INSTALL_DIR/fourkit/" || true
     done
     write_client_launcher
@@ -243,8 +242,6 @@ for file in server.properties banned-players.json banned-ips.json; do
     fi
     ln -sf "\$PERSIST_DIR/\$file" "\$WORK_DIR/\$file"
 done
-rm -rf "\$WORK_DIR/Windows64/GameHDD" 2>/dev/null || true
-ln -sf "\$PERSIST_DIR/GameHDD" "\$WORK_DIR/Windows64/GameHDD"
 cd "\$WORK_DIR"
 if [[ -z "\${DISPLAY:-}" ]]; then
     export DISPLAY=":99"
