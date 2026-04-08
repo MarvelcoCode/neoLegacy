@@ -1,7 +1,7 @@
 ![LCE Revelations Banner](.github/LCE-Revelations-banner.png)
 # Legacy Console Edition Revelations
 
-[![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2?logo=discord&logoColor=white)](https://discord.gg/ycYvGjWmhu)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2?logo=discord&logoColor=white)](https://discord.gg/vhEHre5sCB)
 
 This project is based on Legacy Console Edition v1.6.0560.0 (TU19) with fixes and improvements applied. Among these, LCE-Revelations features:
 
