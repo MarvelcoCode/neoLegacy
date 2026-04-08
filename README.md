@@ -1,4 +1,4 @@
-![Legacy Edition Banner](.github/LCRE-banner.png)
+![LCE Revelations Banner](.github/LCE-Revelations-banner.png)
 # Minecraft Legacy Revelations
 
 [![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2?logo=discord&logoColor=white)](https://discord.gg/ycYvGjWmhu)
@@ -51,7 +51,7 @@ This project is based on source code of Minecraft Legacy Console Edition v1.6.05
 
 - Fixed a critical bug where the security gate (packet buffer) was closed before the LoginPacket was sent during `placeNewPlayer`. Under high-latency connections (e.g. players connecting through tunnels or from distant regions), the LoginPacket and all login setup packets were buffered behind the cipher handshake. When the handshake completed and the gate flushed, game data arrived before the player object was initialized, causing a null pointer crash on the client
 - The security gate now closes after the login sequence and MC|CKey are sent, so essential setup packets arrive in plaintext before the cipher handshake completes
-- **Server owners must update their dedicated server binary to this version.** Players connecting to an updated server must also use the updated client (LCRE builds that include the cipher handshake support)
+- **Server owners must update their dedicated server binary to this version.** Players connecting to an updated server must also use the updated client (LCE Revelations builds that include the cipher handshake support)
 
 ### Uncapped FPS (VSync Off)
 
@@ -117,7 +117,7 @@ proxy-protocol=true
 - Security events appear in the CLI with `[security]` tags
 - Each join shows a security summary: cipher status, token status, XUID, and real IP
 
-**Important:** When `require-secure-client=true` and `enable-stream-cipher=true`, only the secured client (`LCREWindows64.zip`) can connect. Old/upstream clients will be blocked before receiving any game data. Set both to `false` if you want to allow all clients.
+**Important:** When `require-secure-client=true` and `enable-stream-cipher=true`, only the secured client (`LCE-Revelations-Client-Win64.zip`) can connect. Old/upstream clients will be blocked before receiving any game data. Set both to `false` if you want to allow all clients.
 
 ### Player List Map Icon Color Fix
 
@@ -215,9 +215,9 @@ proxy-protocol=true
 ### Dedicated Server Hardcore Mode
 
 - Dedicated server is fully compatible with `smartcmd/MinecraftConsoles` clients, even with hardcore mode
-- Client (`LCREWindows64.zip`): download from the Nightly release on GitHub
-- Dedicated Server (`LCREServerWindows64.zip`): download from the Nightly-Dedicated-Server release on GitHub
-- Docker: pull `ghcr.io/itsrevela/minecraft-lce-dedicated-server:nightly` for server container
+- Client (`LCE-Revelations-Client-Win64.zip`): download from the Nightly release on GitHub
+- Dedicated Server (`LCE-Revelations-Server-Win64.zip`): download from the Nightly-Dedicated-Server release on GitHub
+- Docker: pull `ghcr.io/lce-hub/lce-revelations-dedicated-server:nightly` for server container
 
 ### Screenshot Functionality
 
@@ -225,7 +225,7 @@ proxy-protocol=true
 - Works in any context: main menu, pause menu, settings, inventory, crafting, and during gameplay
 - A local-only chat message is shown to the player when in-game
 
-Proper implementation of Hardcore Mode in LCRE!
+Proper implementation of Hardcore Mode in LCE Revelations!
 - difficulty slider included in create world menu
 - difficulty slider forces "Difficulty: Hardcore" on world load
 - singleplayer: host death, force no respawn, on exit deletes world

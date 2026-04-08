@@ -1,11 +1,15 @@
 services:
-  minecraft-lce-dedicated-server:
+  lce-revelations-dedicated-server:
     build:
       context: .
       dockerfile: docker/dedicated-server/Dockerfile
       args:
-        MC_RUNTIME_DIR: ${MC_RUNTIME_DIR:-x64/Minecraft.Server/Release}
-    container_name: minecraft-lce-dedicated-server
+        # Bakes the vanilla (no plugin support) server flavour built with CMake.
+        # The FourKit-enabled flavour is intentionally NOT shipped via Docker
+        # yet because hosting .NET 10 self-contained through Wine has not been
+        # smoke-tested. Run the FourKit server natively on Windows instead.
+        MC_RUNTIME_DIR: ${MC_RUNTIME_DIR:-build/windows64/Minecraft.Server/Release}
+    container_name: lce-revelations-dedicated-server
     restart: unless-stopped
     tty: true
     stdin_open: true
