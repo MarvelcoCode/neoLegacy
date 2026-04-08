@@ -1,6 +1,6 @@
 ![Logo](.gitea/minecraft_title.png)
 # Legacy Evolved
-This project aims to backport the newer title updates back to the Minecraft: Legacy Console Edition Source Code (which is based on TU19).
+This project aims to backport the newer title updates back to Legacy Console Edition (which is based on TU19).
 
 [![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2?logo=discord&logoColor=white)](https://discord.gg/D6hEPNYeyn)
 <a href="https://emerald-legacy-launcher.github.io/">
@@ -10,9 +10,9 @@ This project aims to backport the newer title updates back to the Minecraft: Leg
 # Our roadmap:
 ![Roadmap](.gitea/roadmap.png)
 
-- Port Title Update 25 (98.21% complete)
+- Port TU25 (98.21% complete)
 
-- Port Title Update 31 (76.12% complete)
+- Port TU31 (76.12% complete)
 
 See our [Contributor's Guide](./CONTRIBUTING.md) for more information on the goals of this project.
 
