@@ -40,8 +40,8 @@ jobs:
       shell: pwsh
       run: |
         $source = "./build/windows64/Minecraft.Client/Release"
-        $zip = "LCREWindows64.zip"
-        $topLevel = "LCREWindows64"
+        $zip = "LCE-Revelations-Client-Win64.zip"
+        $topLevel = "LCE-Revelations-Client-Win64"
 
         # Collect files, excluding unwanted extensions
         $files = Get-ChildItem -Path $source -Recurse -File |
@@ -78,7 +78,7 @@ jobs:
       shell: pwsh
       run: |
         New-Item -ItemType Directory -Force -Path staging
-        Copy-Item LCREWindows64.zip staging/
+        Copy-Item LCE-Revelations-Client-Win64.zip staging/
         Copy-Item ./build/windows64/Minecraft.Client/Release/Minecraft.Client.exe staging/
 
     - name: Upload artifacts
@@ -101,6 +101,11 @@ jobs:
     - name: Setup CMake
       uses: lukka/get-cmake@latest
 
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        global-json-file: global.json
+
     - name: Run CMake
       uses: lukka/run-cmake@v10
       env:
@@ -108,14 +113,49 @@ jobs:
       with:
         configurePreset: windows64
         buildPreset: windows64-release
-        buildPresetAdditionalArgs: "['--target', 'Minecraft.Server']"
+        buildPresetAdditionalArgs: "['--target', 'Minecraft.Server', '--target', 'Minecraft.Server.FourKit']"
 
-    - name: Zip Build
+    - name: Zip Build (vanilla)
       shell: pwsh
       run: |
         $source = "./build/windows64/Minecraft.Server/Release"
-        $zip = "LCREServerWindows64.zip"
-        $topLevel = "LCREServerWindows64"
+        $zip = "LCE-Revelations-Server-Win64.zip"
+        $topLevel = "LCE-Revelations-Server-Win64"
+
+        $files = Get-ChildItem -Path $source -Recurse -File |
+          Where-Object { $_.Extension -notin '.pch', '.zip', '.ipdb', '.iobj' }
+
+        Add-Type -AssemblyName System.IO.Compression
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+        $basePath = (Resolve-Path $source).Path
+        $fs = [System.IO.File]::Open($zip, [System.IO.FileMode]::Create)
+        try {
+          $archive = New-Object System.IO.Compression.ZipArchive($fs, [System.IO.Compression.ZipArchiveMode]::Create)
+          try {
+            Get-ChildItem -Path $basePath -Recurse -Directory | ForEach-Object {
+              $rel = $_.FullName.Substring($basePath.Length).TrimStart('\', '/')
+              $archive.CreateEntry("$topLevel/$($rel -replace '\\','/')/") | Out-Null
+            }
+            foreach ($file in $files) {
+              $rel = $file.FullName.Substring($basePath.Length).TrimStart('\', '/')
+              $entryName = "$topLevel/$($rel -replace '\\','/')"
+              [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                $archive, $file.FullName, $entryName,
+                [System.IO.Compression.CompressionLevel]::Optimal
+              ) | Out-Null
+            }
+          } finally { $archive.Dispose() }
+        } finally { $fs.Dispose() }
+
+        Write-Host "Created $zip"
+
+    - name: Zip Build (FourKit)
+      shell: pwsh
+      run: |
+        $source = "./build/windows64/Minecraft.Server.FourKit/Release"
+        $zip = "LCE-Revelations-Server-Win64-FourKit.zip"
+        $topLevel = "LCE-Revelations-Server-Win64-FourKit"
 
         $files = Get-ChildItem -Path $source -Recurse -File |
           Where-Object { $_.Extension -notin '.pch', '.zip', '.ipdb', '.iobj' }
@@ -149,7 +189,8 @@ jobs:
       shell: pwsh
       run: |
         New-Item -ItemType Directory -Force -Path staging
-        Copy-Item LCREServerWindows64.zip staging/
+        Copy-Item LCE-Revelations-Server-Win64.zip staging/
+        Copy-Item LCE-Revelations-Server-Win64-FourKit.zip staging/
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v6
@@ -176,7 +217,8 @@ jobs:
       uses: actions/attest-build-provenance@v2
       with:
         subject-path: |
-          artifacts/LCREServerWindows64.zip
+          artifacts/LCE-Revelations-Server-Win64.zip
+          artifacts/LCE-Revelations-Server-Win64-FourKit.zip
 
     - name: Get short SHA
       id: sha
@@ -213,7 +255,11 @@ jobs:
           --title "Server: ${{ steps.sha.outputs.short }}" \
           --notes "Dedicated Server runtime for Windows64.
 
-        Download \`LCREServerWindows64.zip\` and extract it to a folder where you'd like to keep the server runtime." \
+        Two flavours are attached:
+        - \`LCE-Revelations-Server-Win64.zip\`: vanilla server, no plugin support, smallest download.
+        - \`LCE-Revelations-Server-Win64-FourKit.zip\`: server with the FourKit plugin host, bundled .NET 10 runtime, and an empty \`plugins/\` folder ready for plugin authors to drop DLLs into.
+
+        Pick the flavour you want and extract it to a folder where you'd like to keep the server runtime." \
           --latest=false
 
   release-client:
@@ -235,7 +281,7 @@ jobs:
       uses: actions/attest-build-provenance@v2
       with:
         subject-path: |
-          artifacts/LCREWindows64.zip
+          artifacts/LCE-Revelations-Client-Win64.zip
           artifacts/Minecraft.Client.exe
 
     - name: Get short SHA
@@ -270,15 +316,15 @@ jobs:
         cat > notes.md <<'NOTES'
         # Instructions:
         **Newcomers:**
-        - If this is your first time, download `LCREWindows64.zip` and extract it wherever you would like to keep it.
+        - If this is your first time, download `LCE-Revelations-Client-Win64.zip` and extract it wherever you would like to keep it.
         - I would recommend to set your username prior to launch (create a file called `username.txt`, put your desired username into the file, and save).
         - To play, simply run `Minecraft.Client.exe`.
 
         **For those that wish to update their existing installation with the latest build:**
-        - Download `Minecraft.Client.exe` and `Minecraft.Client.pdb` and copy them over to your existing LCREWindows64 build (overwrite your old version of Minecraft.Client.exe and Minecraft.Client.pdb).
+        - Download `Minecraft.Client.exe` and `Minecraft.Client.pdb` and copy them over to your existing LCE-Revelations-Client-Win64 build (overwrite your old version of Minecraft.Client.exe and Minecraft.Client.pdb).
 
         **Steam Deck & Linux:**
-        - Y'all know the drill. Download the `LCREWindows64.zip`, extract it, add the `Minecraft.Client.exe` as a "Non-Steam Game" within the Steam library, turn on compatibility mode with Proton Experimental, and then run it!
+        - Y'all know the drill. Download the `LCE-Revelations-Client-Win64.zip`, extract it, add the `Minecraft.Client.exe` as a "Non-Steam Game" within the Steam library, turn on compatibility mode with Proton Experimental, and then run it!
 
         # Multiplayer instructions:
         LAN games are natively supported, and any LAN games will appear automatically on the right. However, if you'd like to play with your friends online (and if you don't want to require them to setup a vpn, and/or if you don't want to port forward), I would recommend the following setup. Please keep in mind, you do NOT need to do this to enjoy the game. This is just how I have it setup for me so my friends can join without any hassle:
@@ -289,7 +335,7 @@ jobs:
 
         How-to:
         - Ensure your playit.gg agent is connected to your playit.gg account
-        - On the playit.gg website, setup a new tunnel (choose TCP). Ensure the configurable settings are set to the below values, assuming your agent is installed on the same computer as your online LCREMinecraft game is hosted from.
+        - On the playit.gg website, setup a new tunnel (choose TCP). Ensure the configurable settings are set to the below values, assuming your agent is installed on the same computer as your online LCE Revelations game is hosted from.
         - Configurable settings:
           - Local IP: `127.0.0.1`
           - Local Port: `25565`

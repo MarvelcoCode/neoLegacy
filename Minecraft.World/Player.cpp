@@ -2571,6 +2571,29 @@ void Player::restoreFrom(shared_ptr<Player> oldPlayer, bool restoreAll)
 		setScore(oldPlayer->getScore());
 		portalEntranceDir = oldPlayer->portalEntranceDir;
 	}
+#if defined(MINECRAFT_SERVER_BUILD)
+	else if (oldPlayer->fk_hasDeathState)
+	{
+		if (oldPlayer->fk_deathKeepInventory || level->getGameRules()->getBoolean(GameRules::RULE_KEEPINVENTORY))
+		{
+			inventory->replaceWith(oldPlayer->inventory);
+		}
+		if (oldPlayer->fk_deathKeepLevel || level->getGameRules()->getBoolean(GameRules::RULE_KEEPINVENTORY))
+		{
+			experienceLevel = oldPlayer->experienceLevel;
+			totalExperience = oldPlayer->totalExperience;
+			experienceProgress = oldPlayer->experienceProgress;
+		}
+		else
+		{
+			experienceLevel = oldPlayer->fk_deathNewLevel;
+			totalExperience = 0;
+			int xpNeeded = getXpNeededForNextLevel();
+			experienceProgress = (xpNeeded > 0) ? (float)oldPlayer->fk_deathNewExp / (float)xpNeeded : 0.0f;
+		}
+		setScore(oldPlayer->getScore());
+	}
+#endif
 	else if (level->getGameRules()->getBoolean(GameRules::RULE_KEEPINVENTORY))
 	{
 		inventory->replaceWith(oldPlayer->inventory);

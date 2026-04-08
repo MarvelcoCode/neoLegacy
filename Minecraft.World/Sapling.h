@@ -36,8 +36,8 @@ public:
 	virtual void tick(Level *level, int x, int y, int z, Random *random);
 
 	virtual Icon *getTexture(int face, int data);
-	virtual void advanceTree(Level *level, int x, int y, int z, Random *random);
-	void growTree(Level *level, int x, int y, int z, Random *random);
+	virtual void advanceTree(Level* level, int x, int y, int z, Random* random, bool naturalGrowth = true, int entityId = -1);
+	void growTree(Level* level, int x, int y, int z, Random* random, bool naturalGrowth = true, int entityId = -1);
 
 	virtual unsigned int getDescriptionId(int iData = -1);
 	bool isSapling(Level *level, int x, int y, int z, int type);

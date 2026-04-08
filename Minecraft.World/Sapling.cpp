@@ -3,8 +3,13 @@
 #include "net.minecraft.world.level.tile.h"
 #include "net.minecraft.world.level.levelgen.feature.h"
 #include "net.minecraft.world.h"
-
+#include "Dimension.h"
 #include "Sapling.h"
+
+#if defined(_WINDOWS64)
+#include "../Minecraft.Server/FourKitBridge.h"
+#endif
+
 
 int Sapling::SAPLING_NAMES[SAPLING_NAMES_SIZE] = {	IDS_TILE_SAPLING_OAK,
 	IDS_TILE_SAPLING_SPRUCE,
@@ -47,8 +52,7 @@ Icon *Sapling::getTexture(int face, int data)
 	data = data & TYPE_MASK;
 	return icons[data];
 }
-
-void Sapling::advanceTree(Level *level, int x, int y, int z, Random *random)
+void Sapling::advanceTree(Level* level, int x, int y, int z, Random* random, bool naturalGrowth, int entityId)
 {
 	int data = level->getData(x, y, z);
 	if ((data & AGE_BIT) == 0)
@@ -57,11 +61,10 @@ void Sapling::advanceTree(Level *level, int x, int y, int z, Random *random)
 	}
 	else
 	{
-		growTree(level, x, y, z, random);
+		growTree(level, x, y, z, random, naturalGrowth, entityId);
 	}
 }
-
-void Sapling::growTree(Level *level, int x, int y, int z, Random *random)
+void Sapling::growTree(Level* level, int x, int y, int z, Random* random, bool naturalGrowth, int entityId)
 {
 	int data = level->getData(x, y, z) & TYPE_MASK;
 
@@ -124,7 +127,25 @@ void Sapling::growTree(Level *level, int x, int y, int z, Random *random)
 	{
 		level->setTileAndData(x, y, z, 0, 0, Tile::UPDATE_NONE);
 	}
-	if (!f->place(level, random, x + ox, y, z + oz))
+
+#if defined(_WINDOWS64) && defined(MINECRAFT_SERVER_BUILD)
+	int TreeType = data;
+	if (data != TYPE_EVERGREEN && data != TYPE_BIRCH && data != TYPE_JUNGLE) {
+		if (dynamic_cast<BasicTree*>(f) != nullptr) {
+			TreeType = 4; //large tree
+		}
+		else {
+			TreeType = 5; //normal tree
+		}
+	}
+
+	if (FourKitBridge::FireStructureGrow(level->dimension->id, x, y, z, TreeType, !naturalGrowth, entityId)) {
+		if (f != nullptr) delete f;
+		f = nullptr;
+	}
+#endif
+
+	if (f == nullptr || !f->place(level, random, x + ox, y, z + oz))
 	{
 		if (multiblock)
 		{

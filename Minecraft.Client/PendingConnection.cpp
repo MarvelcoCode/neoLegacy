@@ -19,6 +19,8 @@
 #include "..\Minecraft.Server\Access\Access.h"
 #include "..\Minecraft.Server\Security\SecurityConfig.h"
 #include "..\Minecraft.World\Socket.h"
+#include <FourKitBridge.h>
+#include <Windows64/Network/WinsockNetLayer.h>
 #endif
 // #ifdef __PS3__
 // #include "PS3\Network\NetworkPlayerSony.h"
@@ -112,6 +114,54 @@ void PendingConnection::handlePreLogin(shared_ptr<PreLoginPacket> packet)
 		}
 		return;
 	}
+
+#if defined(_WINDOWS64) && defined(MINECRAFT_SERVER_BUILD)
+	{
+		std::string connectionIp = "";
+		int connectionPort = 0;
+
+		if (connection && connection->getSocket()) {
+			unsigned char smallId = connection->getSocket()->getSmallId();
+			if (smallId != 0) {
+				if (!ServerRuntime::ServerLogManager::TryGetConnectionRemoteIp(smallId, &connectionIp))
+				{
+					SOCKET sock = WinsockNetLayer::GetSocketForSmallId(smallId);
+					if (sock != INVALID_SOCKET)
+					{
+						sockaddr_in addr;
+						int addrLen = sizeof(addr);
+						if (getpeername(sock, (sockaddr*)&addr, &addrLen) == 0)
+						{
+							char ipBuf[64] = {};
+							if (inet_ntop(AF_INET, &addr.sin_addr, ipBuf, sizeof(ipBuf)))
+							{
+								connectionIp = ipBuf;
+								connectionPort = (int)ntohs(addr.sin_port);
+							}
+						}
+					}
+				} else {
+					SOCKET sock = WinsockNetLayer::GetSocketForSmallId(smallId);
+					if (sock != INVALID_SOCKET)
+					{
+						sockaddr_in addr;
+						int addrLen = sizeof(addr);
+						if (getpeername(sock, (sockaddr*)&addr, &addrLen) == 0)
+							connectionPort = (int)ntohs(addr.sin_port);
+					}
+				}
+
+				if (!connectionIp.empty()) {
+					if (FourKitBridge::FirePlayerPreLogin(packet->loginKey, connectionIp, connectionPort)) {
+						disconnect(DisconnectPacket::eDisconnect_EndOfStream);
+						return;
+					}
+				}
+			}
+		}
+	}
+#endif
+
 	//	printf("Server: handlePreLogin\n");
 	name = packet->loginKey; // 4J Stu - Change from the login packet as we know better on client end during the pre-login packet
 	sendPreLoginResponse();
@@ -200,6 +250,62 @@ void PendingConnection::handleLogin(shared_ptr<LoginPacket> packet)
 
 	//if (true)// 4J removed !server->onlineMode)
 	bool sentDisconnect = false;
+
+#if defined(_WINDOWS64) && defined(MINECRAFT_SERVER_BUILD)
+	{
+		std::string connectionIp = "";
+		int connectionPort = 0;
+
+		if (!connection || !connection->getSocket()) {
+			disconnect(DisconnectPacket::eDisconnect_EndOfStream);
+			return;
+		}
+
+		unsigned char smallId = connection->getSocket()->getSmallId();
+		if (smallId == 0) {
+			disconnect(DisconnectPacket::eDisconnect_EndOfStream);
+			return;
+		}
+
+		if (!ServerRuntime::ServerLogManager::TryGetConnectionRemoteIp(smallId, &connectionIp))
+		{
+			SOCKET sock = WinsockNetLayer::GetSocketForSmallId(smallId);
+			if (sock != INVALID_SOCKET)
+			{
+				sockaddr_in addr;
+				int addrLen = sizeof(addr);
+				if (getpeername(sock, (sockaddr*)&addr, &addrLen) == 0)
+				{
+					char ipBuf[64] = {};
+					if (inet_ntop(AF_INET, &addr.sin_addr, ipBuf, sizeof(ipBuf)))
+					{
+						connectionIp = ipBuf;
+						connectionPort = (int)ntohs(addr.sin_port);
+					}
+				}
+			}
+			if (connectionIp.empty()) {
+				disconnect(DisconnectPacket::eDisconnect_EndOfStream);
+				return;
+			}
+		}
+		else {
+			SOCKET sock = WinsockNetLayer::GetSocketForSmallId(smallId);
+			if (sock != INVALID_SOCKET)
+			{
+				sockaddr_in addr;
+				int addrLen = sizeof(addr);
+				if (getpeername(sock, (sockaddr*)&addr, &addrLen) == 0)
+					connectionPort = (int)ntohs(addr.sin_port);
+			}
+		}
+
+		if (FourKitBridge::FirePlayerLogin(packet->userName, connectionIp, connectionPort, 1, &packet->m_onlineXuid, &packet->m_offlineXuid)) {
+			disconnect(DisconnectPacket::eDisconnect_EndOfStream);
+			return;
+		}
+	}
+#endif
 
 	// Use the same Xuid choice as handleAcceptedLogin (offline first, online fallback).
 	// 
@@ -394,6 +500,62 @@ void PendingConnection::handleAcceptedLogin(shared_ptr<LoginPacket> packet)
 		sendPreLoginResponse();
 		return;
 	}
+
+#if defined(_WINDOWS64) && defined(MINECRAFT_SERVER_BUILD)
+	{
+		std::string connectionIp = "";
+		int connectionPort = 0;
+
+		if (!connection || !connection->getSocket()) {
+			disconnect(DisconnectPacket::eDisconnect_EndOfStream);
+			return;
+		}
+
+		unsigned char smallId = connection->getSocket()->getSmallId();
+		if (smallId == 0) {
+			disconnect(DisconnectPacket::eDisconnect_EndOfStream);
+			return;
+		}
+
+		if (!ServerRuntime::ServerLogManager::TryGetConnectionRemoteIp(smallId, &connectionIp))
+		{
+			SOCKET sock = WinsockNetLayer::GetSocketForSmallId(smallId);
+			if (sock != INVALID_SOCKET)
+			{
+				sockaddr_in addr;
+				int addrLen = sizeof(addr);
+				if (getpeername(sock, (sockaddr*)&addr, &addrLen) == 0)
+				{
+					char ipBuf[64] = {};
+					if (inet_ntop(AF_INET, &addr.sin_addr, ipBuf, sizeof(ipBuf)))
+					{
+						connectionIp = ipBuf;
+						connectionPort = (int)ntohs(addr.sin_port);
+					}
+				}
+			}
+			if (connectionIp.empty()) {
+				disconnect(DisconnectPacket::eDisconnect_EndOfStream);
+				return;
+			}
+		}
+		else {
+			SOCKET sock = WinsockNetLayer::GetSocketForSmallId(smallId);
+			if (sock != INVALID_SOCKET)
+			{
+				sockaddr_in addr;
+				int addrLen = sizeof(addr);
+				if (getpeername(sock, (sockaddr*)&addr, &addrLen) == 0)
+					connectionPort = (int)ntohs(addr.sin_port);
+			}
+		}
+
+		if (FourKitBridge::FirePlayerLogin(packet->userName, connectionIp, connectionPort, 2, &packet->m_onlineXuid, &packet->m_offlineXuid)) {
+			disconnect(DisconnectPacket::eDisconnect_EndOfStream);
+			return;
+		}
+	}
+#endif
 
 	// Guests use the online xuid, everyone else uses the offline one
 	PlayerUID playerXuid = packet->m_offlineXuid;

@@ -14,6 +14,7 @@
 #include "..\Security\SecurityConfig.h"
 #include "..\Security\RateLimiter.h"
 #include "..\Security\IdentityTokenManager.h"
+#include "..\FourKitBridge.h"
 #include "..\WorldManager.h"
 #include "..\Console\ServerCli.h"
 #include "Tesselator.h"
@@ -681,6 +682,8 @@ int main(int argc, char **argv)
 
 	LogStartupStep("server startup complete");
 	LogInfof("startup", "Dedicated server listening on %s:%d", g_Win64MultiplayerIP, g_Win64MultiplayerPort);
+
+	FourKitBridge::Initialize();
 	if (worldBootstrap.status == eWorldBootstrap_CreatedNew && !IsShutdownRequested() && !app.m_bShutdown)
 	{
 		// Windows64 suppresses saveToDisc right after new world creation
@@ -737,6 +740,7 @@ int main(int argc, char **argv)
 			{
 				LogWorldIO("requesting autosave");
 				app.SetXuiServerAction(kServerActionPad, eXuiServerAction_AutoSaveGame);
+				FourKitBridge::FireWorldSave();
 				autosaveRequested = true;
 			}
 			nextAutosaveTick = now + autosaveIntervalMs;
@@ -746,6 +750,8 @@ int main(int argc, char **argv)
 	}
 	serverCli.Stop();
 	app.m_bShutdown = true;
+
+	FourKitBridge::Shutdown(); //close out the translation layer early for plugin shutdown
 
 	LogInfof("shutdown", "Dedicated server stopped");
 	MinecraftServer *server = MinecraftServer::getInstance();

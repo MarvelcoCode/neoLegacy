@@ -30,8 +30,12 @@
 #include "SoundTypes.h"
 #include "BasicTypeContainers.h"
 #include "ParticleTypes.h"
+#include "Dimension.h"
 #include "GenericStats.h"
 #include "ItemEntity.h"
+#if defined(_WINDOWS64) && defined(MINECRAFT_SERVER_BUILD)
+#include "..\Minecraft.Server\FourKitBridge.h"
+#endif
 
 const double LivingEntity::MIN_MOVEMENT_DISTANCE = 0.005;
 
@@ -76,6 +80,9 @@ void LivingEntity::_init()
 	deathScore = 0;
 	lastHurt = 0.0f;
 	jumping = false;
+	
+	fourKitDeathExp = 0;
+	fourKitDeathExpSet = false;
 
 	xxa = 0.0f;
 	yya = 0.0f;
@@ -290,7 +297,11 @@ void LivingEntity::tickDeath()
 		{
 			if (!isBaby() && level->getGameRules()->getBoolean(GameRules::RULE_DOMOBLOOT))
 			{
+#if defined(_WINDOWS64) && defined(MINECRAFT_SERVER_BUILD)
+				int xpCount = fourKitDeathExpSet ? fourKitDeathExp : this->getExperienceReward(lastHurtByPlayer);
+#else
 				int xpCount = this->getExperienceReward(lastHurtByPlayer);
+#endif
 				while (xpCount > 0)
 				{
 					int newCount = ExperienceOrb::getExperienceValue(xpCount);
@@ -762,6 +773,38 @@ bool LivingEntity::hurt(DamageSource *source, float dmg)
 	noActionTime = 0;
 	if (getHealth() <= 0) return false;
 
+#if defined(_WINDOWS64) && defined(MINECRAFT_SERVER_BUILD)
+	{
+		// (SYLV)todo: map these properly
+
+		int entityTypeId = FourKitBridge::MapEntityType((int)GetType());
+		int dimId = level->dimension ? level->dimension->id : 0;
+		int causeId = FourKitBridge::MapDamageCause((void *)source);
+		double outDamage = (double)dmg;
+
+		int damagerEntityId = -1;
+		int damagerEntityTypeId = 0;
+		double damagerX = 0, damagerY = 0, damagerZ = 0;
+		shared_ptr<Entity> damagerEntity = source->getEntity();
+		if (damagerEntity != nullptr)
+		{
+			damagerEntityId = damagerEntity->entityId;
+			damagerEntityTypeId = FourKitBridge::MapEntityType((int)damagerEntity->GetType());
+			damagerX = damagerEntity->x;
+			damagerY = damagerEntity->y;
+			damagerZ = damagerEntity->z;
+		}
+
+		bool cancelled = FourKitBridge::FireEntityDamage(
+			entityId, entityTypeId, dimId,
+			x, y, z, causeId, (double)dmg, &outDamage,
+			damagerEntityId, damagerEntityTypeId, damagerX, damagerY, damagerZ);
+		if (cancelled)
+			return false;
+		dmg = (float)outDamage;
+	}
+#endif
+
 	if ( source->isFire() && hasEffect(MobEffect::fireResistance) )
 	{
 		// 4J-JEV, for new achievement Stayin'Frosty, TODO merge with Java version.
@@ -893,6 +936,18 @@ void LivingEntity::die(DamageSource *source)
 	if (sourceEntity != nullptr) sourceEntity->killed( dynamic_pointer_cast<LivingEntity>( shared_from_this() ) );
 
 	dead = true;
+
+#if defined(_WINDOWS64) && defined(MINECRAFT_SERVER_BUILD)
+	if (!level->isClientSide && !instanceof(eTYPE_SERVERPLAYER) && !instanceof(eTYPE_PLAYER))
+	{
+		int entityTypeId = FourKitBridge::MapEntityType((int)GetType());
+		int dimId = dimension;
+		int exp = getExperienceReward(lastHurtByPlayer);
+		int modifiedExp = FourKitBridge::FireEntityDeath(entityId, entityTypeId, dimId, x, y, z, exp);
+		fourKitDeathExp = modifiedExp;
+		fourKitDeathExpSet = true;
+	}
+#endif
 
 	if (!level->isClientSide)
 	{

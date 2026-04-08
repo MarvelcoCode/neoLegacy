@@ -92,6 +92,11 @@ protected:
 	float lastHurt;
 	bool jumping;
 
+	// DO NOT ADD IFDEF HERE!!
+	// causes memroy layout disagreement. Not good
+	int fourKitDeathExp;
+	bool fourKitDeathExpSet;
+
 public:
 	float xxa;
 	float yya;

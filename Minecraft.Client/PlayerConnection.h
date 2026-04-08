@@ -30,6 +30,8 @@ private:
     int aboveGroundTickCount;
 
     bool didTick;
+    bool hasDoneFirstTickFourKit;
+    int lastLeftClickTick = 0;
 	int lastKeepAliveId;
 	int64_t lastKeepAliveTime;
 	static Random random;

@@ -6,6 +6,9 @@
 #include "..\Minecraft.Client\ServerPlayer.h"
 #include "..\Minecraft.Client\PlayerConnection.h"
 #include "ThrownEnderpearl.h"
+#if defined(_WINDOWS64) && defined(MINECRAFT_SERVER_BUILD)
+#include "..\Minecraft.Server\FourKitBridge.h"
+#endif
 
 
 
@@ -56,13 +59,30 @@ void ThrownEnderpearl::onHit(HitResult *res)
 			{
 				if(!serverPlayer->connection->done && serverPlayer->level == this->level)
 				{
-					if (getOwner()->isRiding())
-					{
-						getOwner()->ride(nullptr);
-					}
-					getOwner()->teleportTo(x, y, z);
-					getOwner()->fallDistance = 0;
-					getOwner()->hurt(DamageSource::fall, 5);
+									if (getOwner()->isRiding())
+									{
+										getOwner()->ride(nullptr);
+									}
+#if defined(_WINDOWS64) && defined(MINECRAFT_SERVER_BUILD)
+									{
+										double outX, outY, outZ;
+										bool cancelled = FourKitBridge::FirePlayerTeleport(serverPlayer->entityId,
+											serverPlayer->x, serverPlayer->y, serverPlayer->z, serverPlayer->dimension,
+											x, y, z, serverPlayer->dimension,
+											0 /* ENDER_PEARL */,
+											&outX, &outY, &outZ);
+										if (!cancelled)
+										{
+											getOwner()->teleportTo(outX, outY, outZ);
+											getOwner()->fallDistance = 0;
+											getOwner()->hurt(DamageSource::fall, 5);
+										}
+									}
+#else
+									getOwner()->teleportTo(x, y, z);
+									getOwner()->fallDistance = 0;
+									getOwner()->hurt(DamageSource::fall, 5);
+#endif
 				}
 			}
 		}

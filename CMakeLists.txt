@@ -84,6 +84,7 @@ list(APPEND MINECRAFT_SHARED_DEFINES ${PLATFORM_DEFINES})
 add_subdirectory(Minecraft.World)
 add_subdirectory(Minecraft.Client)
 if(PLATFORM_NAME STREQUAL "Windows64") # Server is only supported on Windows for now
+  add_subdirectory(Minecraft.Server.FourKit)
   add_subdirectory(Minecraft.Server)
 endif()
 
