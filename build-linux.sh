@@ -129,7 +129,7 @@ do_install() {
     cp "$BUILD_DIR/Minecraft.Client/Minecraft.Client.exe" "$INSTALL_DIR/client/"
     cp "$BUILD_DIR/Minecraft.Server/$BUILD_TYPE/Minecraft.Server.exe" "$INSTALL_DIR/server/"
     cp "$BUILD_DIR/Minecraft.Server.FourKit/$BUILD_TYPE/Minecraft.Server.exe" "$INSTALL_DIR/fourkit/"
-    cp "$BUILD_DIR/Minecraft.Server.FourKit/bin/$BUILD_TYPE/Minecraft.Server.*" "$INSTALL_DIR/fourkit/"
+    cp $BUILD_DIR/Minecraft.Server.FourKit/bin/$BUILD_TYPE/Minecraft.Server.* "$INSTALL_DIR/fourkit/"
     for asset in iggy_w64.dll Common music Windows64 Windows64Media; do
         [[ -e "$BUILD_DIR/Minecraft.Client/$asset" ]] && \
             cp -r "$BUILD_DIR/Minecraft.Client/$asset" "$INSTALL_DIR/client/" || true
