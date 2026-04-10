@@ -6,6 +6,7 @@ private:
 	const string m_strFontName;
 
 	PBYTE pbData;
+	bool m_loaded;
 	//DWORD dwDataSize;
 
 public:
@@ -13,4 +14,5 @@ public:
 	~UITTFFont();
 
 	string getFontName();
+	bool isLoaded() const;
 };

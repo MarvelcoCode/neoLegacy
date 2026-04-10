@@ -16,12 +16,15 @@
 #include "../Minecraft.World/net.minecraft.world.level.tile.entity.h"
 #include "../Minecraft.World/net.minecraft.world.level.saveddata.h"
 #include "../Minecraft.World/net.minecraft.world.entity.animal.h"
+#include "../Minecraft.World/net.minecraft.network.h"
 #include "../Minecraft.World/net.minecraft.world.food.h"
 #include "../Minecraft.World/AABB.h"
+#include "../Minecraft.World/Pos.h"
 #include "../Minecraft.World/SharedConstants.h"
 #include "../Minecraft.World/ChatPacket.h"
 #include "../Minecraft.World/StringHelpers.h"
 #include "../Minecraft.World/Socket.h"
+#include "../Minecraft.World/Achievements.h"
 #include "../Minecraft.World/net.minecraft.h"
 #include "../Minecraft.World/LevelData.h"
 #include "../Minecraft.World/Pos.h"
@@ -31,6 +34,7 @@
 #include "../Minecraft.World/GenericStats.h"
 #include "../Minecraft.World/JavaMath.h"
 
+#include "..\Minecraft.World\ListTag.h"
 // 4J Added
 #include "../Minecraft.World/net.minecraft.world.item.crafting.h"
 #include "Options.h"
@@ -2016,8 +2020,6 @@ void PlayerConnection::handleCustomPayload(shared_ptr<CustomPayloadPacket> custo
 	}
 #endif
 
-#if 0
-	if (CustomPayloadPacket.CUSTOM_BOOK_PACKET.equals(customPayloadPacket.identifier))
 	if (CustomPayloadPacket::CUSTOM_BOOK_PACKET.compare(customPayloadPacket->identifier) == 0)
 	{
 		ByteArrayInputStream bais(customPayloadPacket->data);
@@ -2057,9 +2059,7 @@ void PlayerConnection::handleCustomPayload(shared_ptr<CustomPayloadPacket> custo
 			player->inventory->setItem(player->inventory->selected, sentItem);
 		}
 	}
-	else
-#endif 
-	if (CustomPayloadPacket::TRADER_SELECTION_PACKET.compare(customPayloadPacket->identifier) == 0)
+	else if (CustomPayloadPacket::TRADER_SELECTION_PACKET.compare(customPayloadPacket->identifier) == 0)
 	{
 		ByteArrayInputStream bais(customPayloadPacket->data);
 		DataInputStream input(&bais);

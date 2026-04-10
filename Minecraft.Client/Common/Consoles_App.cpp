@@ -328,11 +328,73 @@ void CMinecraftApp::DebugPrintf(int user, const char *szFormat, ...)
 #endif
 }
 
+namespace
+{
+const wchar_t *ResolveStringKeyFromId(int iID)
+{
+#ifdef _WINDOWS64
+    switch(iID)
+    {
+    #include "StringIdLookup.generated.inc"
+    default:
+        return nullptr;
+    }
+#else
+    (void)iID;
+    return nullptr;
+#endif
+}
+}
+
 LPCWSTR CMinecraftApp::GetString(int iID)
 {
-	//return L"Değişiklikler ve Yenilikler";
-	//return L"ÕÕÕÕÖÖÖÖ";
-	return app.m_stringTable->getString(iID);
+    if(app.m_stringTable == nullptr)
+    {
+        const wchar_t *key = ResolveStringKeyFromId(iID);
+        return key != nullptr ? key : L"";
+    }
+
+    LPCWSTR byIndex = app.m_stringTable->getString(iID);
+    if(byIndex != nullptr && byIndex[0] != L'\0')
+    {
+        return byIndex;
+    }
+
+    const wchar_t *key = ResolveStringKeyFromId(iID);
+    if(key != nullptr)
+    {
+        LPCWSTR byKey = app.m_stringTable->getString(key);
+        if(byKey != nullptr && byKey[0] != L'\0')
+        {
+            return byKey;
+        }
+
+        // Prefer visible fallback text instead of returning an empty string.
+        return key;
+    }
+
+    return L"";
+}
+
+LPCWSTR CMinecraftApp::GetString(const wchar_t *id)
+{
+    if(id == nullptr)
+    {
+        return L"";
+    }
+
+    if(app.m_stringTable == nullptr)
+    {
+        return id;
+    }
+
+    LPCWSTR byKey = app.m_stringTable->getString(id);
+    if(byKey != nullptr && byKey[0] != L'\0')
+    {
+        return byKey;
+    }
+
+    return id;
 }
 
 void CMinecraftApp::SetAction(int iPad, eXuiAction action, LPVOID param)
@@ -4563,6 +4625,58 @@ void CMinecraftApp::loadStringTable()
 		// we need to unload the current string table, this is a reload
 		delete m_stringTable;
 	}
+#ifdef _WINDOWS64
+	m_stringTable = nullptr;
+	const wstring localisationCandidates[] =
+	{
+		L"Common\\Localization", // Fireblade - check multiple directories before resulting to .loc usage
+		L"Windows64Media\\loc",
+		L"..\\Minecraft.Client\\Windows64Media\\loc"
+	};
+
+	for (const auto &localisationFolder : localisationCandidates)
+	{
+		File localisationDirectory(localisationFolder);
+		if (localisationDirectory.exists() && localisationDirectory.isDirectory())
+		{
+			StringTable *candidateTable = new StringTable(localisationFolder); // Fireblade - xml before loc
+
+			const bool hasKeyString = candidateTable->hasStringKey(L"IDS_OK");
+			bool hasIndexString = false;
+			#ifdef IDS_OK
+			LPCWSTR indexedString = candidateTable->getString(IDS_OK);
+			hasIndexString = (indexedString != nullptr && indexedString[0] != L'\0');
+			#endif
+
+			if (hasKeyString || hasIndexString)
+			{
+			    m_stringTable = candidateTable;
+			    app.DebugPrintf("Loaded language data from '%ls'\n", localisationFolder.c_str());
+			    break;
+			}
+
+			app.DebugPrintf("Ignoring localisation path '%ls' (missing expected IDs)\n", localisationFolder.c_str());
+			delete candidateTable;
+		}
+	}
+
+	if (m_stringTable == nullptr && m_mediaArchive != nullptr) // Fireblade - fallback to previous behavior
+	{
+		const wstring localisationFile = L"languages.loc";
+		if (m_mediaArchive->hasFile(localisationFile))
+		{
+			byteArray locFile = m_mediaArchive->getFile(localisationFile);
+			m_stringTable = new StringTable(locFile.data, locFile.length);
+			delete locFile.data;
+		}
+	}
+
+	if (m_stringTable == nullptr)
+	{
+		app.DebugPrintf("Failed to initialize language data\n");
+		assert(false);
+	}
+#else // Fireblade - other platforms keep same logic
 	wstring localisationFile = L"languages.loc";
 	if (m_mediaArchive->hasFile(localisationFile))
 	{
@@ -4576,6 +4690,7 @@ void CMinecraftApp::loadStringTable()
 		assert(false);
 		// AHHHHHHHHH.
 	}
+#endif
 #endif
 }
 

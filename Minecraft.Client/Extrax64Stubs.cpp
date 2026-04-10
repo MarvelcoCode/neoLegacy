@@ -45,7 +45,8 @@ C_4JProfile ProfileManager;
 CSentientManager SentientManager;
 CXuiStringTable StringTable;
 
-#ifndef _XBOX_ONE
+
+#if !defined(_XBOX_ONE) && !defined(_WINDOWS64)
 ATG::XMLParser::XMLParser() {}
 ATG::XMLParser::~XMLParser() {}
 HRESULT    ATG::XMLParser::ParseXMLBuffer(CONST CHAR* strBuffer, UINT uBufferSize) { return S_OK; }

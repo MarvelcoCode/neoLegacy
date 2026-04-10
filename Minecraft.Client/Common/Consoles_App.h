@@ -157,6 +157,7 @@ public:
 	void			SetSpecialTutorialCompletionFlag(int iPad, int index);
 
 	static			LPCWSTR			GetString(int iID);
+	static			LPCWSTR			GetString(const wchar_t *id);
 
 	eGameMode		GetGameMode()																										{ return m_eGameMode;}
 	void			SetGameMode(eGameMode eMode)																						{ m_eGameMode=eMode;}

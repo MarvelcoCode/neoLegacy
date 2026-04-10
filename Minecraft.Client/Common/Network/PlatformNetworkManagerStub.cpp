@@ -175,6 +175,8 @@ bool CPlatformNetworkManagerStub::Initialise(CGameNetworkManager *pGameNetworkMa
 	m_bIsOfflineGame = false;
 #ifdef _WINDOWS64
 	m_bJoinPending = false;
+	m_joinLocalUsersMask = 0;
+	m_joinHostName[0] = 0;
 #endif
 	m_pSearchParam = nullptr;
 	m_SessionsUpdatedCallback = nullptr;
@@ -296,6 +298,7 @@ void CPlatformNetworkManagerStub::DoWork()
 			WinsockNetLayer::FinalizeJoin();
 
 			BYTE localSmallId = WinsockNetLayer::GetLocalSmallId();
+
 			IQNet::m_player[localSmallId].m_smallId = localSmallId;
 			IQNet::m_player[localSmallId].m_isRemote = false;
 			IQNet::m_player[localSmallId].m_isHostPlayer = false;
@@ -552,6 +555,9 @@ int CPlatformNetworkManagerStub::JoinGame(FriendSessionInfo* searchResult, int l
 	wcsncpy_s(IQNet::m_player[0].m_gamertag, 32, searchResult->data.hostName, _TRUNCATE);
 
 	WinsockNetLayer::StopDiscovery();
+
+	wcsncpy_s(m_joinHostName, 32, searchResult->data.hostName, _TRUNCATE);
+	m_joinLocalUsersMask = localUsersMask;
 
 	if (!WinsockNetLayer::BeginJoinGame(hostIP, hostPort))
 	{

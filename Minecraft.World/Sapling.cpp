@@ -226,3 +226,29 @@ unsigned int Sapling::getDescriptionId(int iData)
     if (iData < 0 || iData >= SAPLING_NAMES_SIZE) iData = 0;
     return Sapling::SAPLING_NAMES[iData];
 }
+
+int Sapling::getSpawnResourcesAuxValue(int data)
+{
+    return data & TYPE_MASK;
+}
+
+bool Sapling::isSapling(Level *level, int x, int y, int z, int type)
+{
+    return (level->getTile(x, y, z) == id) && ((level->getData(x, y, z) & TYPE_MASK) == type);
+}
+
+bool Sapling::fertilize(Level *level, int x, int y, int z)
+{
+    this->advanceTree(level, x, y, z, level->random);
+    return true;
+}
+
+void Sapling::registerIcons(IconRegister *iconRegister)
+{
+    icons = new Icon*[SAPLING_NAMES_SIZE];
+
+    for (int i = 0; i < SAPLING_NAMES_SIZE; i++)
+    {
+        icons[i] = iconRegister->registerIcon(TEXTURE_NAMES[i]);
+    }
+}

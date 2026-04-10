@@ -5,7 +5,9 @@
 #include "UITTFFont.h"
 
 UITTFFont::UITTFFont(const string &name, const string &path, S32 fallbackCharacter, bool registerAsDefaultFonts)
-	: m_strFontName(name)
+	: m_strFontName(name),
+	  pbData(nullptr),
+	  m_loaded(false) // check if loaded
 {
 	app.DebugPrintf("UITTFFont opening %s\n",path.c_str());
 
@@ -19,7 +21,7 @@ UITTFFont::UITTFFont(const string &name, const string &path, S32 fallbackCharact
 	{
 		DWORD error = GetLastError();
 		app.DebugPrintf("Failed to open TTF file with error code %d (%x)\n", error, error);
-		assert(false);
+		return; // Fireblade - replaced assert to avoid crashing if font fails to load
 	}
 
 	DWORD dwHigh=0;
@@ -33,7 +35,11 @@ UITTFFont::UITTFFont(const string &name, const string &path, S32 fallbackCharact
 		BOOL bSuccess = ReadFile(file,pbData,dwFileSize,&bytesRead,nullptr);
 		if(bSuccess==FALSE)
 		{
+			delete[] pbData; // Fireblade - avoid memory leaks (hopefully)
+			pbData = nullptr;
+			CloseHandle(file);
 			app.FatalLoadError();
+			return; // Fireblade - return early in case of error
 		}
 		CloseHandle(file);
 
@@ -47,15 +53,26 @@ UITTFFont::UITTFFont(const string &name, const string &path, S32 fallbackCharact
 			IggyFontInstallTruetypeUTF8 ( (void *)pbData, IGGY_TTC_INDEX_none, "Times New Roman", -1, IGGY_FONTFLAG_none );
 			IggyFontInstallTruetypeUTF8 ( (void *)pbData, IGGY_TTC_INDEX_none, "Arial", -1, IGGY_FONTFLAG_none );
 		}
+		m_loaded = true;
+	}
+	else
+	{
+		CloseHandle(file);
 	}
 }
 
 UITTFFont::~UITTFFont()
 {
+	delete[] pbData;
 }
 
 
 string UITTFFont::getFontName()
 {
 	return m_strFontName;
+}
+
+bool UITTFFont::isLoaded() const
+{
+	return m_loaded;
 }

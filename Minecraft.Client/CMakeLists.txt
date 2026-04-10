@@ -25,6 +25,32 @@ set(MINECRAFT_CLIENT_SOURCES
 
 add_executable(Minecraft.Client ${MINECRAFT_CLIENT_SOURCES} )
 
+set(MINECRAFT_CLIENT_COMPILETIME_STRINGS_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/${PLATFORM_NAME}Media/strings.h")
+if(PLATFORM_NAME STREQUAL "Windows64")
+  set(MINECRAFT_CLIENT_COMPILETIME_STRINGS_HEADER "${CMAKE_BINARY_DIR}/generated/Windows64Media/strings.h")
+  file(GLOB_RECURSE MINECRAFT_CLIENT_WINDOWS_LOCALIZATION_XML CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/Windows64Media/loc/*.xml"
+  )
+
+  add_custom_command(
+    OUTPUT "${MINECRAFT_CLIENT_COMPILETIME_STRINGS_HEADER}"
+    COMMAND ${CMAKE_COMMAND}
+      "-DXML_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/Windows64Media/loc"
+      "-DOUTPUT_FILE=${MINECRAFT_CLIENT_COMPILETIME_STRINGS_HEADER}"
+      -P "${CMAKE_SOURCE_DIR}/cmake/GenerateStringsHeaderFromXml.cmake"
+    DEPENDS
+      ${MINECRAFT_CLIENT_WINDOWS_LOCALIZATION_XML}
+      "${CMAKE_SOURCE_DIR}/cmake/GenerateStringsHeaderFromXml.cmake"
+    COMMENT "Generating compile-time string IDs from XML"
+    VERBATIM
+  )
+
+  add_custom_target(GenerateStringsHeader_Minecraft.Client DEPENDS "${MINECRAFT_CLIENT_COMPILETIME_STRINGS_HEADER}")
+  set_property(TARGET GenerateStringsHeader_Minecraft.Client PROPERTY FOLDER "Build")
+  add_dependencies(Minecraft.Client GenerateStringsHeader_Minecraft.Client)
+  add_dependencies(Minecraft.Client GenerateStringIdLookup)
+endif()
+
 # Only define executable on windows
 if(PLATFORM_NAME STREQUAL "Windows64")
   set_target_properties(Minecraft.Client PROPERTIES WIN32_EXECUTABLE TRUE)
@@ -87,6 +113,25 @@ set(ASSET_FOLDER_PAIRS
   "${CMAKE_CURRENT_SOURCE_DIR}/${PLATFORM_NAME}Media"  "${PLATFORM_NAME}Media"
 )
 setup_asset_folder_copy(Minecraft.Client "${ASSET_FOLDER_PAIRS}")
+
+# copy prebuilt loc folder and use it lmao
+if(PLATFORM_NAME STREQUAL "Windows64")
+  add_custom_target(AssetLocalizationCopy_Minecraft.Client ALL
+    COMMAND ${CMAKE_COMMAND} -E rm -f "$<TARGET_FILE_DIR:Minecraft.Client>/Common/Localization/strings.h"
+    COMMAND ${CMAKE_COMMAND} -E rm -f "$<TARGET_FILE_DIR:Minecraft.Client>/Common/Localization/4J_strings.h"
+    COMMAND ${CMAKE_COMMAND}
+      "-DCOPY_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}/Windows64Media/loc"
+      "-DCOPY_DEST=$<TARGET_FILE_DIR:Minecraft.Client>/Common/Localization"
+      -P "${CMAKE_SOURCE_DIR}/cmake/CopyFolderScript.cmake"
+    COMMAND ${CMAKE_COMMAND} -E rm -f "$<TARGET_FILE_DIR:Minecraft.Client>/Windows64Media/strings.h"
+    COMMAND ${CMAKE_COMMAND} -E rm -f "$<TARGET_FILE_DIR:Minecraft.Client>/Windows64Media/4J_strings.h"
+    COMMENT "Copying language files into build folder..."
+    VERBATIM
+  )
+
+  add_dependencies(Minecraft.Client AssetLocalizationCopy_Minecraft.Client)
+  set_property(TARGET AssetLocalizationCopy_Minecraft.Client PROPERTY FOLDER "Build")
+endif()
 
 # Copy redist files
 add_copyredist_target(Minecraft.Client)

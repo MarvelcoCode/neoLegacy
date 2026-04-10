@@ -429,10 +429,28 @@ void UIController::SetupFont()
 	else if (m_eTargetFont != eFont_NotLoaded)
 	{
 		m_mcTTFFont = createFont(m_eTargetFont);
+		if (m_mcTTFFont == nullptr || !m_mcTTFFont->isLoaded())
+		{
+			if (m_mcTTFFont != nullptr)
+			{
+				delete m_mcTTFFont;
+				m_mcTTFFont = nullptr;
+			}
 
-		app.DebugPrintf("[Iggy] Set font indirect to '%hs'.\n", m_mcTTFFont->getFontName().c_str());
-		IggyFontSetIndirectUTF8( "Mojangles7",	-1, IGGY_FONTFLAG_all, m_mcTTFFont->getFontName().c_str(), -1, IGGY_FONTFLAG_none );
-		IggyFontSetIndirectUTF8( "Mojangles11",	-1, IGGY_FONTFLAG_all, m_mcTTFFont->getFontName().c_str(), -1, IGGY_FONTFLAG_none );
+			app.DebugPrintf("Failed to load font %i. Falling back to bitmaps.\n", nextLanguage);
+			m_eTargetFont = eFont_Bitmap;
+
+			if (m_moj7 == nullptr) m_moj7 = new UIBitmapFont(SFontData::Mojangles_7);
+			if (m_moj11 == nullptr) m_moj11 = new UIBitmapFont(SFontData::Mojangles_11);
+			m_moj7->registerFont();
+			m_moj11->registerFont();
+		}
+		else
+		{
+			app.DebugPrintf("[Iggy] Set font indirect to '%hs'.\n", m_mcTTFFont->getFontName().c_str());
+			IggyFontSetIndirectUTF8( "Mojangles7",	-1, IGGY_FONTFLAG_all, m_mcTTFFont->getFontName().c_str(), -1, IGGY_FONTFLAG_none );
+			IggyFontSetIndirectUTF8( "Mojangles11",	-1, IGGY_FONTFLAG_all, m_mcTTFFont->getFontName().c_str(), -1, IGGY_FONTFLAG_none );
+		}
 	}
 	else
 	{
