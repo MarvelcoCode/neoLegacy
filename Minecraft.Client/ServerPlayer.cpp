@@ -1431,7 +1431,6 @@ bool ServerPlayer::openBeacon(shared_ptr<BeaconTileEntity> beacon)
 		nextContainerCounter();
 		containerMenu = new BeaconMenu(inventory, beacon);
 		containerMenu->containerId = containerCounter;
-		containerMenu->addSlotListener(this);
 #if defined(_WINDOWS64) && defined(MINECRAFT_SERVER_BUILD)
 		if (FourKitBridge::FireInventoryOpen(entityId, ContainerOpenPacket::BEACON, beacon->getCustomName(), beacon->getContainerSize()))
 		{
@@ -1439,7 +1438,10 @@ bool ServerPlayer::openBeacon(shared_ptr<BeaconTileEntity> beacon)
 			return true;
 		}
 #endif
+		// Send the open packet BEFORE addSlotListener so the client has the
+		// menu ready when the beacon data (levels, powers) arrives.
 		connection->send(std::make_shared<ContainerOpenPacket>(containerCounter, ContainerOpenPacket::BEACON, beacon->getCustomName(), beacon->getContainerSize(), beacon->hasCustomName()));
+		containerMenu->addSlotListener(this);
 		refreshContainer(containerMenu);
 	}
 	else
