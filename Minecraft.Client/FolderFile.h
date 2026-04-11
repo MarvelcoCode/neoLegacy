@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <vector>
 #include <unordered_map>
@@ -15,6 +15,7 @@ private:
     unordered_map<wstring, wstring> m_filePaths; // filename -> full path
     
     void _buildFileIndex();
+    void _buildFileIndexRecursive(const wstring& currentPath, const wstring& relativePath);
     
 public:
     FolderFile(wstring folderPath);

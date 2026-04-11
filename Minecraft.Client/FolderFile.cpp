@@ -1,4 +1,4 @@
-﻿#include "stdafx.h"
+#include "stdafx.h"
 
 #include "../Minecraft.World/StringHelpers.h"
 #include "../Minecraft.World/compression.h"
@@ -7,7 +7,12 @@
 
 void FolderFile::_buildFileIndex()
 {
-    wstring searchPath = m_folderPath + L"\\*";
+    _buildFileIndexRecursive(m_folderPath, L"");
+}
+
+void FolderFile::_buildFileIndexRecursive(const wstring& currentPath, const wstring& relativePath)
+{
+    wstring searchPath = currentPath + L"\\*";
     WIN32_FIND_DATAW findData;
     HANDLE hFind = FindFirstFileW(searchPath.c_str(), &findData);
 
@@ -19,13 +24,20 @@ void FolderFile::_buildFileIndex()
 
     do
     {
-        if (!(findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+        if (wcscmp(findData.cFileName, L".") == 0 || wcscmp(findData.cFileName, L"..") == 0)
+            continue;
+
+        wstring filename = findData.cFileName;
+        wstring fullRelativePath = relativePath.empty() ? filename : relativePath + L"\\" + filename;
+        wstring fullPath = currentPath + L"\\" + filename;
+
+        if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
         {
-            wstring filename = findData.cFileName;
-            wstring fullPath = m_folderPath + L"\\" + filename;
-            
-            // Store filename without path for compatibility with existing code
-            m_filePaths[filename] = fullPath;
+            _buildFileIndexRecursive(fullPath, fullRelativePath);
+        }
+        else
+        {
+            m_filePaths[fullRelativePath] = fullPath;
         }
     } while (FindNextFileW(hFind, &findData));
 
