@@ -106,7 +106,6 @@ void EnchantmentMenu::slotsChanged(int a) // 4J used to take a shared_ptr<Contai
 		}
 		m_costsChanged = true;
 		alreadyRan = false;
-		
 	}
 	else
 	{

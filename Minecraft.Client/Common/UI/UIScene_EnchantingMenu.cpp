@@ -18,10 +18,6 @@ UIScene_EnchantingMenu::UIScene_EnchantingMenu(int iPad, void *_initData, UILaye
 	m_enchantButton[1].init(1);
 	m_enchantButton[2].init(2);
 
-	
-
-	
-
 	EnchantingScreenInput *initData = static_cast<EnchantingScreenInput *>(_initData);
 	
 	m_labelEnchant.init( initData->name.empty() ? app.GetString(IDS_ENCHANT) : initData->name );
