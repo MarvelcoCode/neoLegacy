@@ -287,6 +287,9 @@ void UIScene_BookAndQuillMenu::handleInput(int iPad, int key, bool repeat, bool 
 						navigateBack();
 					}
 				}
+				else {
+					navigateBack();
+				}
 			}
 			else
 			{
@@ -471,10 +474,13 @@ void UIScene_BookAndQuillMenu::handlePress(F64 controlId, F64 childId)
 #endif
 		break;
 	case eControl_Book:
+		if (signedBook == true) {
+			break;
+		}
 		if (g_KBMInput.IsKBMActive()) {
 			//This does not work when using controller. Why? God knows...
 			this->SetFocusToElement(eControl_Type);
-			m_typeText.beginDirectEdit(1023, false, L"");
+			m_typeText.beginDirectEdit(1023, signing, data->player->getDisplayName());
 		}
 		else {
 			if (signedBook == true) {
