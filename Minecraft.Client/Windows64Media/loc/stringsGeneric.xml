@@ -9338,6 +9338,14 @@ All Ender Chests in a world are linked. Items placed into an Ender Chest are acc
 	<data name="IDS_ENDERMITE">
 		<value>Endermite</value>
 	</data>
+	
+	<data name="IDS_GUARDIAN">
+		<value>Guardian</value>
+	</data>
+	
+	<data name="IDS_ELDER_GUARDIAN">
+		<value>Elder Guardian</value>
+	</data>
 
 	<data name="IDS_ITEM_WRITTENBOOK">
 		<value>Written Book</value>
