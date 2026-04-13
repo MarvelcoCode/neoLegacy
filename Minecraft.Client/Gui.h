@@ -17,6 +17,7 @@ private:
 	static const int m_iMaxMessageWidth = 280;
 	static ItemRenderer *itemRenderer;
 	vector<GuiMessage> guiMessages[XUSER_MAX_COUNT];
+	int chatIndex = 0;
 	Random *random;
 
 	Minecraft *minecraft;
