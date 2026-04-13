@@ -28,6 +28,17 @@ This project is based on Legacy Console Edition v1.6.0560.0 (TU19) with fixes an
 
 ## Latest:
 
+### Upstream Merges
+
+- Better text scaling for F3 debug menu on high-DPI monitors (#1494)
+- Scrollable chat with mouse wheel, full message history visible when chat is open (#1493)
+- Entity network limit increased from 2k to 16k (#1492)
+- Font mipmapping disabled to fix blurry sign text at distance (#1410)
+- Dedicated GPU now requested from AMD/Nvidia drivers on laptops (#850)
+- Reduced build zip size by excluding unused Xbox audio and data files (#1374)
+- Chat formatting support for servers with color codes and action bar messages (#1483)
+- Critical hit sound now plays on critical attacks and kills (#1141)
+
 ### Join Flow Kick Fix
 
 - Fixed newly whitelisted players being insta-kicked on their first connection attempt, then kicked again around 20 seconds into their second attempt. Two separate bugs were colliding: a stale cancel flag left over from the earlier "not whitelisted" rejection screen, and an orphaned login session on the server that would fire a late disconnect packet into a recycled player slot once its 30-second login timer expired
