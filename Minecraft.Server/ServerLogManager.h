@@ -4,7 +4,7 @@
 #include <vector>
 #include <stdarg.h>
 
-#include "..\Minecraft.World\DisconnectPacket.h"
+#include "../Minecraft.World/DisconnectPacket.h"
 
 namespace ServerRuntime
 {

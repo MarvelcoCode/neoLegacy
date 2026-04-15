@@ -5,7 +5,7 @@
 #include <functional>
 #include <windows.h>
 
-#include "..\..\Minecraft.Client\SkinBox.h"
+#include "../../Minecraft.Client/SkinBox.h"
 
 
 #include <vector>
