@@ -6661,8 +6661,6 @@ wstring CMinecraftApp::EscapeHTMLString(const wstring& desc)
 		{L'&', L"&amp;"},
 		{L'<', L"&lt;"},
 		{L'>', L"&gt;"},
-		{L'\"', L"&quot;"},
-		{L'\'', L"&#39;"},
 	};
 
 	wstring finalString = L"";
