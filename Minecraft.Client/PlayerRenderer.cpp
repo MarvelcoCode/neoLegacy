@@ -422,7 +422,7 @@ void PlayerRenderer::additionalRendering(shared_ptr<LivingEntity> _mob, float a)
 
 				entityRenderDispatcher->itemInHandRenderer->renderItem(mob, headGear, 0);
 			}
-			/*else if (headGear->getItem()->id == Item::skull_Id)
+			else if (headGear->getItem()->id == Item::skull_Id)
 			{
 				float s = 17 / 16.0f;
 				glScalef(s, -s, -s);
@@ -433,7 +433,7 @@ void PlayerRenderer::additionalRendering(shared_ptr<LivingEntity> _mob, float a)
 					extra = headGear->getTag()->getString(L"SkullOwner");
 				}
 				SkullTileRenderer::instance->renderSkull(-0.5f, 0, -0.5f, Facing::UP, 180, headGear->getAuxValue(), extra);
-			}*/
+			}
 			//SkullTileRenderer::instance->renderSkull(-0.5f, 0, -0.5f, Facing::UP, 180, headGear->getAuxValue(), extra);
 			glPopMatrix();
 		}

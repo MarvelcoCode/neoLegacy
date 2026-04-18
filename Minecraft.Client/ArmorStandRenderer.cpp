@@ -21,9 +21,11 @@ static const float DEG_TO_RAD = 3.14159265f / 180.0f;
 
 ResourceLocation ArmorStandRenderer::LOC_ARMOR_STAND = ResourceLocation(TN_MOB_ARMORSTAND);
 
+
 ArmorStandRenderer::ArmorStandArmorLayer::ArmorStandArmorLayer(LivingEntityRenderer* renderer)
     : HumanoidArmorLayer(renderer)
 {
+
     delete armorModel1;
     delete armorModel2;
     armorModel1 = new ArmorStandArmorModel(0.5f);
@@ -42,16 +44,22 @@ ArmorStandRenderer::ArmorStandRenderer()
     : LivingEntityRenderer(new ArmorStandModel(0.0f), 0.0f)
 {
     armorLayer = new ArmorStandArmorLayer(this);
+
     ArmorStandModel* m = static_cast<ArmorStandModel*>(getModel());
-    headLayer = m ? new CustomHeadLayer(m->head) : nullptr;
+
+
+    headLayer = m ? new CustomHeadLayer(m->head, this) : nullptr;
 }
 
 ArmorStandRenderer::~ArmorStandRenderer() {}
+
+
 
 ResourceLocation* ArmorStandRenderer::getTextureLocation(shared_ptr<Entity> entity)
 {
     return &LOC_ARMOR_STAND;
 }
+
 
 bool ArmorStandRenderer::shouldShowName(shared_ptr<LivingEntity> entity)
 {
@@ -77,12 +85,14 @@ void ArmorStandRenderer::setupRotations(shared_ptr<LivingEntity> mob,
     }
 }
 
+
 void ArmorStandRenderer::render(shared_ptr<Entity> entity,
                                 double x, double y, double z,
                                 float rot, float a)
 {
     LivingEntityRenderer::render(entity, x, y, z, rot, a);
 }
+
 
 void ArmorStandRenderer::renderModel(shared_ptr<LivingEntity> mob,
                                      float wp, float ws, float bob,
@@ -110,44 +120,71 @@ void ArmorStandRenderer::renderModel(shared_ptr<LivingEntity> mob,
         ll.x * DEG_TO_RAD, ll.y * DEG_TO_RAD, ll.z * DEG_TO_RAD,
         rl.x * DEG_TO_RAD, rl.y * DEG_TO_RAD, rl.z * DEG_TO_RAD
     );
-
     if (armorLayer)
     {
         auto applyPose = [&](HumanoidModel* am)
         {
             if (!am) return;
-            am->head->xRot = h.x * DEG_TO_RAD; am->head->yRot = h.y * DEG_TO_RAD; am->head->zRot = h.z * DEG_TO_RAD;
-            if (am->hair) { am->hair->xRot = h.x * DEG_TO_RAD; am->hair->yRot = h.y * DEG_TO_RAD; am->hair->zRot = h.z * DEG_TO_RAD; }
-            am->body->xRot = b.x * DEG_TO_RAD; am->body->yRot = b.y * DEG_TO_RAD; am->body->zRot = b.z * DEG_TO_RAD;
-            am->arm1->xRot = la.x * DEG_TO_RAD; am->arm1->yRot = la.y * DEG_TO_RAD; am->arm1->zRot = la.z * DEG_TO_RAD;
-            am->arm0->xRot = ra.x * DEG_TO_RAD; am->arm0->yRot = ra.y * DEG_TO_RAD; am->arm0->zRot = ra.z * DEG_TO_RAD;
-            am->leg0->xRot = rl.x * DEG_TO_RAD; am->leg0->yRot = rl.y * DEG_TO_RAD; am->leg0->zRot = rl.z * DEG_TO_RAD;
-            am->leg1->xRot = ll.x * DEG_TO_RAD; am->leg1->yRot = ll.y * DEG_TO_RAD; am->leg1->zRot = ll.z * DEG_TO_RAD;
+            am->head->xRot = h.x  * DEG_TO_RAD;
+            am->head->yRot = h.y  * DEG_TO_RAD;
+            am->head->zRot = h.z  * DEG_TO_RAD;
+            if (am->hair)
+            {
+                am->hair->xRot = h.x * DEG_TO_RAD;
+                am->hair->yRot = h.y * DEG_TO_RAD;
+                am->hair->zRot = h.z * DEG_TO_RAD;
+            }
+            am->body->xRot = b.x  * DEG_TO_RAD;
+            am->body->yRot = b.y  * DEG_TO_RAD;
+            am->body->zRot = b.z  * DEG_TO_RAD;
+            am->arm1->xRot = la.x * DEG_TO_RAD;
+            am->arm1->yRot = la.y * DEG_TO_RAD;
+            am->arm1->zRot = la.z * DEG_TO_RAD;
+            am->arm0->xRot = ra.x * DEG_TO_RAD;
+            am->arm0->yRot = ra.y * DEG_TO_RAD;
+            am->arm0->zRot = ra.z * DEG_TO_RAD;
+            am->leg0->xRot = rl.x * DEG_TO_RAD;
+            am->leg0->yRot = rl.y * DEG_TO_RAD;
+            am->leg0->zRot = rl.z * DEG_TO_RAD;
+            am->leg1->xRot = ll.x * DEG_TO_RAD;
+            am->leg1->yRot = ll.y * DEG_TO_RAD;
+            am->leg1->zRot = ll.z * DEG_TO_RAD;
         };
+
         applyPose(static_cast<HumanoidModel*>(armorLayer->armorModel1));
         applyPose(static_cast<HumanoidModel*>(armorLayer->armorModel2));
     }
 
     LivingEntityRenderer::renderModel(mob, wp, ws, bob, headRotMinusBodyRot, headRotx, scale);
 
+
     if (headLayer)
     {
         float fScale = 1.0f / 16.0f;
         float bodyRot = mob->yBodyRotO + (mob->yBodyRot - mob->yBodyRotO) * 0.0f;
         float headRot = mob->yHeadRotO + (mob->yHeadRot - mob->yHeadRotO) * 0.0f;
-        float headRotX = mob->xRotO + (mob->xRot - mob->xRotO) * 0.0f;
+        float headRotX = mob->xRotO    + (mob->xRot    - mob->xRotO)    * 0.0f;
         headLayer->render(mob, wp, ws, bob, headRot - bodyRot, headRotX, fScale, true);
     }
 }
+
 
 void ArmorStandRenderer::additionalRendering(shared_ptr<LivingEntity> mob, float a)
 {
     shared_ptr<ItemInstance> headGear = mob->getArmor(3);
     if (!headGear) return;
 
+
     if ((mob->getAnimOverrideBitmask() & (1 << HumanoidModel::eAnim_DontRenderArmour)) != 0) return;
 
-    if (headGear->getItem()->id >= 256) return;
+    Item* item = headGear->getItem();
+    if (!item) return;
+
+ 
+    if (dynamic_cast<SkullItem*>(item)) return;
+
+ 
+    if (item->id >= 256) return;
 
     ArmorStandModel* m = static_cast<ArmorStandModel*>(getModel());
     if (!m || !m->head) return;
@@ -155,17 +192,21 @@ void ArmorStandRenderer::additionalRendering(shared_ptr<LivingEntity> mob, float
     glPushMatrix();
     m->head->translateTo(1.0f / 16.0f);
 
-    if (Tile::tiles[headGear->id] != nullptr && TileRenderer::canRender(Tile::tiles[headGear->id]->getRenderShape()))
+    if (Tile::tiles[headGear->id] != nullptr
+        && TileRenderer::canRender(Tile::tiles[headGear->id]->getRenderShape()))
     {
         float s = 10.0f / 16.0f;
         glTranslatef(0.0f, -4.0f / 16.0f, 0.0f);
         glRotatef(90.0f, 0.0f, 1.0f, 0.0f);
         glScalef(s, -s, s);
     }
+
     this->entityRenderDispatcher->itemInHandRenderer->renderItem(mob, headGear, 0);
 
     glPopMatrix();
 }
+
+
 int ArmorStandRenderer::prepareArmor(shared_ptr<LivingEntity> mob, int layer, float a)
 {
     if (!armorLayer) return -1;
@@ -174,13 +215,26 @@ int ArmorStandRenderer::prepareArmor(shared_ptr<LivingEntity> mob, int layer, fl
     if (!itemInstance) return -1;
 
     Item* item = itemInstance->getItem();
+    if (!item) return -1;
+
 
     SkullItem* skullItem = dynamic_cast<SkullItem*>(item);
     if (skullItem && layer == 0)
     {
         HumanoidModel* am = armorLayer->getArmorModel(layer);
+        if (!am) return -1;
 
-        switch (itemInstance->getAuxValue())
+
+        am->head->visible  = true;
+        if (am->hair) am->hair->visible = false;
+        am->body->visible  = false;
+        am->arm0->visible  = false;
+        am->arm1->visible  = false;
+        am->leg0->visible  = false;
+        am->leg1->visible  = false;
+
+        int skullType = itemInstance->getAuxValue() & 0xF;
+        switch (skullType)
         {
         case SkullTileEntity::TYPE_WITHER:
             bindTexture(&PlayerRenderer::WITHER_SKELETON_LOCATION);
@@ -200,14 +254,6 @@ int ArmorStandRenderer::prepareArmor(shared_ptr<LivingEntity> mob, int layer, fl
             break;
         }
 
-        am->head->visible  = true;
-        if (am->hair) am->hair->visible = false;
-        am->body->visible  = false;
-        am->arm0->visible  = false;
-        am->arm1->visible  = false;
-        am->leg0->visible  = false;
-        am->leg1->visible  = false;
-
         setArmor(am);
         am->attackTime = model->attackTime;
         am->riding     = model->riding;
@@ -221,13 +267,16 @@ int ArmorStandRenderer::prepareArmor(shared_ptr<LivingEntity> mob, int layer, fl
     bindTexture(HumanoidMobRenderer::getArmorLocation(armorItem, layer));
 
     HumanoidModel* am = armorLayer->getArmorModel(layer);
-    am->head->visible  = (layer == 0);
+    if (!am) return -1;
+
+
+    am->head->visible = (layer == 0);
     if (am->hair) am->hair->visible = (layer == 0);
-    am->body->visible  = (layer == 1 || layer == 2);
-    am->arm0->visible  = (layer == 1);
-    am->arm1->visible  = (layer == 1);
-    am->leg0->visible  = (layer == 2 || layer == 3);
-    am->leg1->visible  = (layer == 2 || layer == 3);
+    am->body->visible = (layer == 1 || layer == 2);
+    am->arm0->visible = (layer == 1);
+    am->arm1->visible = (layer == 1);
+    am->leg0->visible = (layer == 2 || layer == 3);
+    am->leg1->visible = (layer == 2 || layer == 3);
 
     setArmor(am);
     am->attackTime = model->attackTime;
@@ -236,17 +285,14 @@ int ArmorStandRenderer::prepareArmor(shared_ptr<LivingEntity> mob, int layer, fl
 
     if (armorItem->getMaterial() == ArmorItem::ArmorMaterial::CLOTH)
     {
-        int color = armorItem->getColor(itemInstance);
+        int   color = armorItem->getColor(itemInstance);
         float red   = static_cast<float>((color >> 16) & 0xFF) / 255.0f;
-        float green = static_cast<float>((color >> 8)  & 0xFF) / 255.0f;
-        float blue  = static_cast<float>(color & 0xFF)         / 255.0f;
+        float green = static_cast<float>((color >>  8) & 0xFF) / 255.0f;
+        float blue  = static_cast<float>( color        & 0xFF) / 255.0f;
         glColor3f(red, green, blue);
-        if (itemInstance->isEnchanted()) return 0x1f;
-        return 0x10;
+        return itemInstance->isEnchanted() ? 0x1f : 0x10;
     }
 
     glColor3f(1.0f, 1.0f, 1.0f);
-    if (itemInstance->isEnchanted()) return 15;
-    return 1;
+    return itemInstance->isEnchanted() ? 15 : 1;
 }
-
