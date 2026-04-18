@@ -15,7 +15,7 @@ void GameType::staticCtor()
 	SURVIVAL = new GameType(0, L"survival");
 	CREATIVE = new GameType(1, L"creative");
 	ADVENTURE = new GameType(2, L"adventure");
-	ADVENTURE = new GameType(3, L"spectator");
+	SPECTATOR = new GameType(3, L"spectator");
 }
 
 GameType::GameType(int id, const wstring &name)
